@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: npm run check
+        id: check
+        run: npm run check
+        continue-on-error: true
+      - name: Publish test report (Checks tab)
+        uses: dorny/test-reporter@06b4484c17d304ad4a41a84c844c2ee967535ce2 # v2.3.0
+        if: always() && github.event_name == 'pull_request'
+        with:
+          name: Vitest
+          path: test-results/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+      - name: Build PR test summary
+        id: summary
+        if: always() && github.event_name == 'pull_request'
+        run: node scripts/ci-test-summary.mjs >> "$GITHUB_OUTPUT"
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          GITHUB_SHA: ${{ github.sha }}
+      - name: Update PR test results comment
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+        if: always() && github.event_name == 'pull_request'
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "<!-- launchpad-vitest-results -->"
+          edit-mode: replace
+          body: ${{ steps.summary.outputs.body }}
+      - name: Fail job if check failed
+        if: steps.check.outcome != 'success'
+        run: exit 1
