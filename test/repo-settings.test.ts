@@ -5,6 +5,7 @@ describe("repo-settings (unit)", () => {
   it("prints a dry-run by default", () => {
     const out = execFileSync("node", ["scripts/repo-settings.mjs"], {
       encoding: "utf8",
+      env: { ...process.env, GITHUB_REPOSITORY: "didi-build/example" },
     });
     expect(out).toContain("Dry run");
     expect(out).toContain("required_approving_review_count");

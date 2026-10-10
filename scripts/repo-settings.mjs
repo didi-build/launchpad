@@ -9,14 +9,16 @@ function ghJson(ghArgs) {
   return JSON.parse(out);
 }
 
-let repo;
-try {
-  repo = ghJson(["repo", "view", "--json", "nameWithOwner"]).nameWithOwner;
-} catch {
-  console.error(
-    "Could not resolve repository. Run inside a git repo with `gh` authenticated.",
-  );
-  process.exit(1);
+let repo = process.env.GITHUB_REPOSITORY;
+if (!repo) {
+  try {
+    repo = ghJson(["repo", "view", "--json", "nameWithOwner"]).nameWithOwner;
+  } catch {
+    console.error(
+      "Could not resolve repository. Set GITHUB_REPOSITORY or run with `gh` authenticated.",
+    );
+    process.exit(1);
+  }
 }
 
 const protection = {
