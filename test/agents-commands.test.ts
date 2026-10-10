@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { markdownDocumentsNpmRunScript } from "../scripts/lib/npm-run-in-markdown.mjs";
 
 /** Scripts omitted from AGENTS.md — lifecycle hooks or only invoked via `npm run check`. */
 const EXEMPT = new Set(["prepare", "placeholders", "attribution", "test:watch"]);
@@ -15,9 +16,9 @@ describe("AGENTS.md command table", () => {
     for (const name of Object.keys(pkg.scripts)) {
       if (EXEMPT.has(name)) continue;
       expect(
-        commandsSection,
+        markdownDocumentsNpmRunScript(commandsSection, name),
         `add \`npm run ${name}\` to AGENTS.md ## Commands`,
-      ).toMatch(new RegExp(`npm run ${name.replace(/:/g, "\\:")}`));
+      ).toBe(true);
     }
   });
 });

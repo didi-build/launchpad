@@ -47,15 +47,15 @@ This file is the single source of truth for how agents work in this repository. 
 
 ## Commands
 
-| Script                       | Purpose                                                                 |
-| ---------------------------- | ----------------------------------------------------------------------- |
-| `npm run check`              | Format, lint, typecheck, test, secret scan, placeholders, attribution   |
-| `npm run lint`               | ESLint                                                                  |
-| `npm run format`             | Prettier write                                                          |
-| `npm run format:check`       | Prettier check                                                          |
-| `npm run typecheck`          | `tsc --noEmit`                                                          |
-| `npm run test`               | Vitest (CI uses JUnit output)                                           |
-| `npm run secrets`            | Secretlint                                                              |
-| `npm run init-project`       | Replace `{{…}}` placeholders after creating a repo from Launchpad       |
-| `npm run repo-settings`      | Dry-run, `--apply`, or `--verify` recommended GitHub repo settings      |
-| `npm run verify-action-pins` | Ensure `.github/workflows` use full commit SHAs for third-party actions |
+| Script                       | Purpose                                                                |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `npm run check`              | Format, lint, typecheck, test, secret scan, placeholders, attribution  |
+| `npm run lint`               | ESLint                                                                 |
+| `npm run format`             | Prettier write                                                         |
+| `npm run format:check`       | Prettier check                                                         |
+| `npm run typecheck`          | `tsc --noEmit`                                                         |
+| `npm run test`               | Vitest (CI uses JUnit output)                                          |
+| `npm run secrets`            | Secretlint                                                             |
+| `npm run init-project`       | Replace `{{…}}` placeholders after creating a repo from Launchpad      |
+| `npm run repo-settings`      | Dry-run, `--apply`, or `--verify` recommended GitHub repo settings     |
+| `npm run verify-action-pins` | Verify each pinned action SHA matches its version comment (`# vX.Y.Z`) |

@@ -33,7 +33,7 @@ npm run check        # format, lint, typecheck, test, secrets, placeholders, att
 npm run test         # vitest
 npm run test:watch   # vitest watch mode
 npm run repo-settings   # dry-run / --apply / --verify GitHub repo settings
-npm run verify-action-pins   # ensure workflow actions use pinned SHAs
+npm run verify-action-pins   # verify each pinned action SHA matches its # vX.Y.Z comment
 ```
 
 ## Git hooks
