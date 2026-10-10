@@ -15,7 +15,7 @@ describe("ci-test-summary (unit)", () => {
     const body = runSummary({
       INSTALL_OUTCOME: "failure",
       CHECK_OUTCOME: "skipped",
-      GITHUB_SHA: "abcdef1234567890",
+      PR_HEAD_SHA: "abcdef1234567890",
     });
     expect(body).toContain("<!-- launchpad-vitest-results -->");
     expect(body).toContain("npm ci");
@@ -28,7 +28,7 @@ describe("ci-test-summary (unit)", () => {
     const body = runSummary({
       INSTALL_OUTCOME: "success",
       CHECK_OUTCOME: "success",
-      GITHUB_SHA: "deadbeef00000000",
+      PR_HEAD_SHA: "deadbeef00000000",
     });
     expect(body).toContain("**check**");
     expect(body).toContain("`success`");

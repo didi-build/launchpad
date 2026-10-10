@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 const marker = "<!-- launchpad-vitest-results -->";
 const checkOutcome = process.env.CHECK_OUTCOME ?? "unknown";
 const installOutcome = process.env.INSTALL_OUTCOME ?? "unknown";
-const sha = (process.env.GITHUB_SHA ?? "").slice(0, 7);
+const sha = (process.env.PR_HEAD_SHA ?? "").slice(0, 7);
 
 const lines = [];
 

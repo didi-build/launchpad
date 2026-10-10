@@ -48,7 +48,7 @@ jobs:
         env:
           CHECK_OUTCOME: ${{ steps.check.outcome }}
           INSTALL_OUTCOME: ${{ steps.install.outcome }}
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - name: Find PR test results comment
         id: find-comment
         if: always() && github.event_name == 'pull_request'
