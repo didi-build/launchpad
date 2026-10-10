@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { ensureDependabotAutomergeLabel } from "./lib/dependabot-label.mjs";
 import {
   defaultBranch,
   protectionMatches,
@@ -55,13 +56,16 @@ const protectionEndpoint = `repos/${repo}/branches/${branchName}/protection`;
 console.log(`Repository: ${repo}`);
 console.log(`Branch: ${branchName}\n`);
 
+function printDryRunCommand(method, endpoint, body) {
+  console.log(`# ${method} ${endpoint}`);
+  console.log(`cat <<'LAUNCHPAD_JSON' | gh api -X ${method} ${endpoint} --input -`);
+  console.log(JSON.stringify(body, null, 2));
+  console.log("LAUNCHPAD_JSON");
+  console.log("");
+}
+
 function fetchActual() {
-  let protectionActual = null;
-  try {
-    protectionActual = ghApi("GET", protectionEndpoint);
-  } catch {
-    protectionActual = null;
-  }
+  const protectionActual = ghApi("GET", protectionEndpoint);
   const repoActual = ghJson([
     "api",
     `repos/${repo}`,
@@ -80,7 +84,9 @@ function reportVerify() {
     console.error("Expected:", JSON.stringify(protection, null, 2));
     console.error("Actual:", JSON.stringify(protectionActual, null, 2));
   } else {
-    console.log("✅ Branch protection matches (PR required, check job, no reviews).");
+    console.log(
+      "✅ Branch protection matches (PR required, check job, zero approvals).",
+    );
   }
   if (!repositorySettingsMatch(repoActual, repoSettings)) {
     ok = false;
@@ -100,16 +106,13 @@ if (verify) {
 }
 
 if (apply) {
+  ensureDependabotAutomergeLabel(repo);
   ghApi("PUT", protectionEndpoint, protection);
   console.log("Branch protection updated.");
   ghApi("PATCH", `repos/${repo}`, repoSettings);
   console.log("Repository settings updated (auto-merge, delete head branches).");
 } else if (!verify) {
   console.log("Dry run — pass --apply to execute or --verify to check:\n");
-  console.log(
-    `gh api -X PUT ${protectionEndpoint} --input '${JSON.stringify(protection)}'`,
-  );
-  console.log(
-    `gh api -X PATCH repos/${repo} --input '${JSON.stringify(repoSettings)}'`,
-  );
+  printDryRunCommand("PUT", protectionEndpoint, protection);
+  printDryRunCommand("PATCH", `repos/${repo}`, repoSettings);
 }

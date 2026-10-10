@@ -40,4 +40,8 @@ ${lines.join("\n\n")}
 
 Commit: \`${sha}\``;
 
-console.log(`body<<EOF\n${body}\nEOF`);
+if (process.env.OUTPUT_MODE === "body") {
+  console.log(body);
+} else {
+  console.log(`body<<EOF\n${body}\nEOF`);
+}

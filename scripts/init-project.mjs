@@ -1,18 +1,13 @@
 import {
-  copyFileSync,
   readFileSync,
   readdirSync,
+  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 
 const projectReadmeTemplate = "README.project.md";
-if (!statSync(projectReadmeTemplate, { throwIfNoEntry: false })?.isFile()) {
-  console.error(`Missing ${projectReadmeTemplate}`);
-  process.exit(1);
-}
-copyFileSync(projectReadmeTemplate, "README.md");
 
 const [slug, displayName, purposeArg] = process.argv.slice(2);
 if (!slug || !displayName) {
@@ -21,6 +16,15 @@ if (!slug || !displayName) {
   );
   process.exit(1);
 }
+
+if (!statSync(projectReadmeTemplate, { throwIfNoEntry: false })?.isFile()) {
+  console.error(
+    `Missing ${projectReadmeTemplate} (already initialized, or not a Launchpad checkout).`,
+  );
+  process.exit(1);
+}
+
+renameSync(projectReadmeTemplate, "README.md");
 
 const purpose =
   purposeArg ??

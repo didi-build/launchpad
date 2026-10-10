@@ -5,7 +5,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 ## Repository settings (GitHub)
 
 - [ ] Mark the repo **private** (or public) per your org policy
-- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **no required reviews**; enables **auto-merge** and **delete head branch on merge**
+- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **zero approvals**; creates Dependabot auto-merge label; enables **auto-merge** and **delete head branch on merge**
 - [ ] Run **`npm run repo-settings -- --verify`** and fix anything reported
 - [ ] Set **merge strategy** to **squash** (matches Dependabot auto-merge)
 - [ ] Add collaborators / teams and optional [CODEOWNERS](../.github/CODEOWNERS)

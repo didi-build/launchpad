@@ -1,5 +1,5 @@
 /** @typedef {{ strict: boolean; checks: { context: string }[] }} RequiredStatusChecks */
-/** @typedef {{ required_status_checks: RequiredStatusChecks; enforce_admins: boolean; required_pull_request_reviews: null; restrictions: null; allow_force_pushes: boolean; allow_deletions: boolean }} BranchProtection */
+/** @typedef {{ required_status_checks: RequiredStatusChecks; enforce_admins: boolean; required_pull_request_reviews: { required_approving_review_count: number }; restrictions: null; allow_force_pushes: boolean; allow_deletions: boolean }} BranchProtection */
 
 export const defaultBranch = "main";
 
@@ -11,7 +11,9 @@ export function targetBranchProtection() {
       checks: [{ context: "check" }],
     },
     enforce_admins: false,
-    required_pull_request_reviews: null,
+    required_pull_request_reviews: {
+      required_approving_review_count: 0,
+    },
     restrictions: null,
     allow_force_pushes: false,
     allow_deletions: false,
@@ -26,6 +28,15 @@ export function targetRepositorySettings() {
   };
 }
 
+/** @param {boolean} expected */
+function flagMatches(actual, expected) {
+  if (typeof actual === "boolean") return actual === expected;
+  if (actual && typeof actual === "object" && "enabled" in actual) {
+    return actual.enabled === expected;
+  }
+  return false;
+}
+
 export function protectionMatches(actual, expected) {
   if (!actual) return false;
   const checks = actual.required_status_checks?.checks ?? [];
@@ -33,13 +44,16 @@ export function protectionMatches(actual, expected) {
   const expectedContexts = expected.required_status_checks.checks
     .map((c) => c.context)
     .sort();
+  const reviewsOk =
+    actual.required_pull_request_reviews?.required_approving_review_count ===
+    expected.required_pull_request_reviews.required_approving_review_count;
   return (
     actual.required_status_checks?.strict === expected.required_status_checks.strict &&
     JSON.stringify(contexts) === JSON.stringify(expectedContexts) &&
-    actual.required_pull_request_reviews == null &&
-    actual.enforce_admins === expected.enforce_admins &&
-    actual.allow_force_pushes === expected.allow_force_pushes &&
-    actual.allow_deletions === expected.allow_deletions
+    reviewsOk &&
+    flagMatches(actual.enforce_admins, expected.enforce_admins) &&
+    flagMatches(actual.allow_force_pushes, expected.allow_force_pushes) &&
+    flagMatches(actual.allow_deletions, expected.allow_deletions)
   );
 }
 

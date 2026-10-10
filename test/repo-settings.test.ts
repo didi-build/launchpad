@@ -8,7 +8,8 @@ describe("repo-settings (unit)", () => {
       env: { ...process.env, GITHUB_REPOSITORY: "didi-build/example" },
     });
     expect(out).toContain("Dry run");
-    expect(out).toContain("required_pull_request_reviews");
+    expect(out).toContain("required_approving_review_count");
+    expect(out).toContain("--input -");
     expect(out).toContain("allow_auto_merge");
     expect(out).toContain('"check"');
   });

@@ -21,9 +21,15 @@ jobs:
       vars.DEPENDABOT_AUTOMERGE != 'false'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe149efef98 # v3.1.0
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - name: Ensure auto-merge label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/ensure-dependabot-label.mjs
       - name: Mark PR for auto-merge (minor/patch only)
         env:
           GH_TOKEN: ${{ github.token }}

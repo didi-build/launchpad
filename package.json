@@ -21,6 +21,7 @@
     "placeholders": "node scripts/check-placeholders.mjs",
     "init-project": "node scripts/init-project.mjs",
     "repo-settings": "node scripts/repo-settings.mjs",
+    "verify-action-pins": "node scripts/verify-action-pins.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

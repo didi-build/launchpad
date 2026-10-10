@@ -35,7 +35,7 @@ jobs:
         continue-on-error: true
       - name: Publish test report (Checks tab)
         uses: dorny/test-reporter@fe45e9537387dac839af0d33ba56eed8e24189e8 # v2.3.0
-        if: always() && github.event_name == 'pull_request' && steps.install.outcome == 'success'
+        if: always() && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' && steps.install.outcome == 'success'
         with:
           name: Vitest
           path: test-results/junit.xml
@@ -49,18 +49,25 @@ jobs:
           CHECK_OUTCOME: ${{ steps.check.outcome }}
           INSTALL_OUTCOME: ${{ steps.install.outcome }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: PR test summary (Dependabot)
+        if: always() && github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          OUTPUT_MODE: body
+        run: node scripts/ci-test-summary.mjs >> "$GITHUB_STEP_SUMMARY"
       - name: Find PR test results comment
         id: find-comment
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
           body-includes: "<!-- launchpad-vitest-results -->"
-      # body-includes is only valid on find-comment (above), not create-or-update-comment
       - name: Update PR test results comment
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        if: always() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}

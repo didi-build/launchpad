@@ -7,13 +7,15 @@ import {
 } from "../scripts/lib/repo-settings-target.mjs";
 
 describe("repo-settings-target (unit)", () => {
-  it("requires PR and check with no reviews", () => {
+  it("requires PR and check with zero approvals", () => {
     const target = targetBranchProtection();
-    expect(target.required_pull_request_reviews).toBeNull();
+    expect(target.required_pull_request_reviews).toEqual({
+      required_approving_review_count: 0,
+    });
     expect(target.required_status_checks.checks).toEqual([{ context: "check" }]);
   });
 
-  it("matches protection when reviews are disabled", () => {
+  it("matches GitHub branch protection API shape", () => {
     const expected = targetBranchProtection();
     expect(
       protectionMatches(
@@ -22,10 +24,12 @@ describe("repo-settings-target (unit)", () => {
             strict: true,
             checks: [{ context: "check" }],
           },
-          enforce_admins: false,
-          required_pull_request_reviews: null,
-          allow_force_pushes: false,
-          allow_deletions: false,
+          enforce_admins: { enabled: false },
+          required_pull_request_reviews: {
+            required_approving_review_count: 0,
+          },
+          allow_force_pushes: { enabled: false },
+          allow_deletions: { enabled: false },
         },
         expected,
       ),
