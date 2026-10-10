@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isEligible, pickPrNumber } from "../scripts/dependabot-automerge.mjs";
+import {
+  isCleanStatusError,
+  isEligible,
+  pickPrNumber,
+} from "../scripts/dependabot-automerge.mjs";
 
 describe("dependabot-automerge (unit)", () => {
   describe("pickPrNumber", () => {
@@ -22,6 +26,21 @@ describe("dependabot-automerge (unit)", () => {
     it("skips invalid PR numbers", () => {
       expect(pickPrNumber("0")).toMatchObject({ ok: false });
       expect(pickPrNumber("abc")).toMatchObject({ ok: false });
+    });
+  });
+
+  describe("isCleanStatusError", () => {
+    it("detects GitHub clean status merge errors", () => {
+      expect(isCleanStatusError("gh: Pull request is in clean status (HTTP 422)")).toBe(
+        true,
+      );
+      expect(isCleanStatusError("something about clean status")).toBe(true);
+    });
+
+    it("returns false for other errors", () => {
+      expect(isCleanStatusError("HTTP 403")).toBe(false);
+      expect(isCleanStatusError("")).toBe(false);
+      expect(isCleanStatusError(undefined)).toBe(false);
     });
   });
 

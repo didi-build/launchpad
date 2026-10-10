@@ -64,23 +64,72 @@ export function isEligible({ author, headRef, labels }) {
   return { ok: true };
 }
 
+/** @param {string | null | undefined} stderr */
+export function isCleanStatusError(stderr) {
+  return /clean status/i.test(stderr ?? "");
+}
+
 function formatGhFailure(command, result) {
   const detail = result.stderr || result.stdout || `exit ${result.status}`;
   return `Command failed: ${command}\n${detail}`;
 }
 
-function runGh(ghArgs) {
+function tryRunGh(ghArgs) {
   const command = `gh ${ghArgs.join(" ")}`;
   const result = spawnSync("gh", ghArgs, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     env: process.env,
   });
-  if (result.status !== 0) {
-    console.error(formatGhFailure(command, result));
+  return {
+    command,
+    ok: result.status === 0,
+    status: result.status ?? 1,
+    stdout: result.stdout?.trim() ?? "",
+    stderr: result.stderr?.trim() ?? "",
+  };
+}
+
+function runGh(ghArgs) {
+  const result = tryRunGh(ghArgs);
+  if (!result.ok) {
+    console.error(formatGhFailure(result.command, result));
     process.exit(1);
   }
-  return result.stdout?.trim() ?? "";
+  return result.stdout;
+}
+
+function mergeDependabotPr(prNumber, repo) {
+  const autoResult = tryRunGh([
+    "pr",
+    "merge",
+    String(prNumber),
+    "--repo",
+    repo,
+    "--auto",
+    "--squash",
+    "--delete-branch",
+  ]);
+  if (autoResult.ok) {
+    return;
+  }
+  if (isCleanStatusError(autoResult.stderr)) {
+    console.log(
+      "Auto-merge unavailable (PR already in clean/mergeable status); merging with squash.",
+    );
+    runGh([
+      "pr",
+      "merge",
+      String(prNumber),
+      "--repo",
+      repo,
+      "--squash",
+      "--delete-branch",
+    ]);
+    return;
+  }
+  console.error(formatGhFailure(autoResult.command, autoResult));
+  process.exit(1);
 }
 
 function main() {
@@ -122,16 +171,7 @@ function main() {
   console.log(
     `Enabling auto-merge for Dependabot PR #${prNumber} (${pr.headRefName}) after successful CI.`,
   );
-  runGh([
-    "pr",
-    "merge",
-    String(prNumber),
-    "--repo",
-    repo,
-    "--auto",
-    "--squash",
-    "--delete-branch",
-  ]);
+  mergeDependabotPr(prNumber, repo);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

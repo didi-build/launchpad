@@ -54,6 +54,7 @@ jobs:
     name: automerge
     if: >-
       github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success' &&
       vars.DEPENDABOT_AUTOMERGE != 'false'
     runs-on: ubuntu-latest
