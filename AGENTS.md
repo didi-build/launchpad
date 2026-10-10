@@ -1,0 +1,53 @@
+# Agent instructions
+
+**Project:** {{PROJECT_NAME}} — {{PROJECT_PURPOSE}}
+
+This file is the single source of truth for how agents work in this repository. Other agent entry points only link here.
+
+## Before you write code
+
+1. Read `docs/architecture/` and `docs/decisions/` for this feature.
+2. If architecture or an accepted decision is missing, stop and produce a decision or architecture note first. **No implementation before the shape of the feature is decided.**
+
+## Engineering standards
+
+- Prefer clean, modular boundaries; small extensions over clever hacks; readable names; minimal duplication.
+- Follow this repo’s docs and config over your general habits.
+- Mark unknowns as unknown. Do not guess requirements or infrastructure.
+
+## Testing
+
+- State which seam a test covers (unit, integration, or broader).
+- Pick the seam that gives confidence without bending production code to satisfy weak tests.
+- Never weaken production code only to make a test pass.
+
+## Verification
+
+- Run `npm run check` before claiming work is done. Do not skip verification after implementation.
+
+## Secrets
+
+- Never commit secrets. Use `.env` locally; document variable **names** only in `.env.example`.
+
+## Scope and tickets
+
+- The linked Linear ticket is the source of truth for scope.
+- Read-only or decision-only tasks: no code, no branches, no PR — post the answer where the ticket asks.
+
+## Pull requests
+
+- Keep PRs small and link the Linear ticket.
+- Describe what changed, why, and how you verified (include `npm run check`).
+
+## Commands
+
+| Script                 | Purpose                                                           |
+| ---------------------- | ----------------------------------------------------------------- |
+| `npm run check`        | Format, lint, typecheck, test, secret scan, placeholder check     |
+| `npm run lint`         | ESLint                                                            |
+| `npm run format`       | Prettier write                                                    |
+| `npm run format:check` | Prettier check                                                    |
+| `npm run typecheck`    | `tsc --noEmit`                                                    |
+| `npm run test`         | Vitest (CI uses JUnit output)                                     |
+| `npm run secrets`      | Secretlint                                                        |
+| `npm run init-project` | Replace `{{…}}` placeholders after creating a repo from Launchpad |
