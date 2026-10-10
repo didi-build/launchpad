@@ -17,7 +17,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Replace Launchpad placeholders
 
-- [ ] Run `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"]`
+- [ ] Run `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"]` (replaces `README.md` from `README.project.md`)
 - [ ] Search for `Launchpad` / `launchpad` leftovers in README and docs
 - [ ] Update [AGENTS.md](../AGENTS.md) project line if needed
 - [ ] Confirm `npm run check` passes (including placeholder check)

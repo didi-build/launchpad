@@ -24,14 +24,18 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - name: npm ci
+        id: install
+        run: npm ci
+        continue-on-error: true
       - name: npm run check
         id: check
+        if: steps.install.outcome == 'success'
         run: npm run check
         continue-on-error: true
       - name: Publish test report (Checks tab)
-        uses: dorny/test-reporter@06b4484c17d304ad4a41a84c844c2ee967535ce2 # v2.3.0
-        if: always() && github.event_name == 'pull_request'
+        uses: dorny/test-reporter@fe45e9537387dac839af0d33ba56eed8e24189e8 # v2.3.0
+        if: always() && github.event_name == 'pull_request' && steps.install.outcome == 'success'
         with:
           name: Vitest
           path: test-results/junit.xml
@@ -43,15 +47,24 @@ jobs:
         run: node scripts/ci-test-summary.mjs >> "$GITHUB_OUTPUT"
         env:
           CHECK_OUTCOME: ${{ steps.check.outcome }}
-          GITHUB_SHA: ${{ github.sha }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Find PR test results comment
+        id: find-comment
+        if: always() && github.event_name == 'pull_request'
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- launchpad-vitest-results -->"
       - name: Update PR test results comment
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         if: always() && github.event_name == 'pull_request'
         with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
-          body-includes: "<!-- launchpad-vitest-results -->"
           edit-mode: replace
           body: ${{ steps.summary.outputs.body }}
-      - name: Fail job if check failed
-        if: steps.check.outcome != 'success'
+      - name: Fail job if install or check failed
+        if: steps.install.outcome != 'success' || steps.check.outcome != 'success'
         run: exit 1

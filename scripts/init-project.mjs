@@ -1,5 +1,18 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
+
+const projectReadmeTemplate = "README.project.md";
+if (!statSync(projectReadmeTemplate, { throwIfNoEntry: false })?.isFile()) {
+  console.error(`Missing ${projectReadmeTemplate}`);
+  process.exit(1);
+}
+copyFileSync(projectReadmeTemplate, "README.md");
 
 const [slug, displayName, purposeArg] = process.argv.slice(2);
 if (!slug || !displayName) {
