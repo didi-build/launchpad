@@ -30,7 +30,7 @@ jobs:
         run: npm run check
         continue-on-error: true
       - name: Publish test report (Checks tab)
-        uses: dorny/test-reporter@06b4484c17d304ad4a41a84c844c2ee967535ce2 # v2.3.0
+        uses: dorny/test-reporter@fe45e9537387dac839af0d33ba56eed8e24189e8 # v2.3.0
         if: always() && github.event_name == 'pull_request'
         with:
           name: Vitest
