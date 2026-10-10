@@ -1,12 +1,15 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 
 const WORKFLOWS_DIR = ".github/workflows";
 const PIN_RE = /uses:\s+([^@\s]+)@([0-9a-f]{40})\s+#\s*(v[^\s]+)/gi;
 
 function ghApi(path) {
-  const out = execFileSync("gh", ["api", path], { encoding: "utf8" });
+  const out = execFileSync("gh", ["api", path], {
+    encoding: "utf8",
+    env: { ...process.env, GH_TOKEN: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN },
+  });
   return JSON.parse(out);
 }
 
@@ -20,6 +23,16 @@ function resolveTagToCommit(repo, tag) {
     return tagObj.object.sha;
   }
   throw new Error(`${repo}@${tag}: unexpected ref type ${type}`);
+}
+
+function commitExists(repo, sha) {
+  const result = spawnSync("gh", ["api", `repos/${repo}/commits/${sha}`], {
+    encoding: "utf8",
+    env: { ...process.env, GH_TOKEN: process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN },
+  });
+  if (result.status !== 0) return false;
+  const data = JSON.parse(result.stdout);
+  return data.sha === sha;
 }
 
 function collectPins() {
@@ -47,11 +60,21 @@ if (pins.length === 0) {
 
 let failed = false;
 for (const { file, repo, pin, tag } of pins) {
+  if (pin.length !== 40) {
+    failed = true;
+    console.log(
+      `FAIL  ${file}  ${repo}@${tag}  pin=${pin}  resolved=(invalid pin length ${pin.length})`,
+    );
+    continue;
+  }
   const resolved = resolveTagToCommit(repo, tag);
-  const ok = resolved === pin;
+  const tagOk = resolved === pin;
+  const commitOk = commitExists(repo, pin);
+  const ok = tagOk && commitOk;
   if (!ok) failed = true;
+  const commitNote = commitOk ? "commit=OK" : "commit=MISSING";
   console.log(
-    `${ok ? "OK" : "FAIL"}  ${file}  ${repo}@${tag}  pin=${pin}  resolved=${resolved}`,
+    `${ok ? "OK" : "FAIL"}  ${file}  ${repo}@${tag}  pin=${pin}  resolved=${resolved}  ${commitNote}`,
   );
 }
 

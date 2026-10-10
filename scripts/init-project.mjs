@@ -7,33 +7,53 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
-const projectReadmeTemplate = "README.project.md";
+const README_TEMPLATE = "README.project.md";
+const LICENSE_TEMPLATE = "LICENSE.project";
 
-const [slug, displayName, purposeArg] = process.argv.slice(2);
+const positional = process.argv.slice(2);
+const slug = positional[0];
+const displayName = positional[1];
+const purposeArg = positional[2];
+const ownerArg = positional[3];
+
 if (!slug || !displayName) {
   console.error(
-    'Usage: npm run init-project -- <slug> "<display name>" ["<one-line purpose>"]',
+    'Usage: npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"]',
   );
   process.exit(1);
 }
 
-if (!statSync(projectReadmeTemplate, { throwIfNoEntry: false })?.isFile()) {
+if (positional.length > 4) {
+  console.error("Too many arguments.");
+  process.exit(1);
+}
+
+if (!statSync(README_TEMPLATE, { throwIfNoEntry: false })?.isFile()) {
   console.error(
-    `Missing ${projectReadmeTemplate} (already initialized, or not a Launchpad checkout).`,
+    `Missing ${README_TEMPLATE} (already initialized, or not a Launchpad checkout).`,
   );
   process.exit(1);
 }
 
-renameSync(projectReadmeTemplate, "README.md");
+if (!statSync(LICENSE_TEMPLATE, { throwIfNoEntry: false })?.isFile()) {
+  console.error(
+    `Missing ${LICENSE_TEMPLATE} (already initialized, or not a Launchpad checkout).`,
+  );
+  process.exit(1);
+}
 
 const purpose =
   purposeArg ??
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
+const owner = ownerArg ?? "Didi Build";
+const year = String(new Date().getUTCFullYear());
 
 const replacements = new Map([
   ["{{PROJECT_SLUG}}", slug],
   ["{{PROJECT_NAME}}", displayName],
   ["{{PROJECT_PURPOSE}}", purpose],
+  ["{{PROJECT_YEAR}}", year],
+  ["{{PROJECT_OWNER}}", owner],
 ]);
 
 function listFiles(path) {
@@ -52,7 +72,8 @@ function listFiles(path) {
 }
 
 const textFiles = [
-  "README.md",
+  README_TEMPLATE,
+  LICENSE_TEMPLATE,
   "AGENTS.md",
   "package.json",
   ...listFiles("docs"),
@@ -73,8 +94,12 @@ for (const file of textFiles) {
 const pkgPath = "package.json";
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 pkg.name = slug;
+pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+renameSync(README_TEMPLATE, "README.md");
+renameSync(LICENSE_TEMPLATE, "LICENSE");
 
 console.log(`Initialized project "${displayName}" (${slug}).`);
 console.log("Next: npm install && npm run check");

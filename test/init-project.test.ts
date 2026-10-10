@@ -16,34 +16,62 @@ function seedLaunchpadDir(root: string) {
     "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n\n<!-- launchpad-attribution:start -->\n<!-- launchpad-attribution:end -->\n",
   );
   writeFileSync(
+    join(root, "LICENSE.project"),
+    "Copyright (c) {{PROJECT_YEAR}} {{PROJECT_OWNER}}. All rights reserved.\n",
+  );
+  writeFileSync(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "launchpad", launchpadTemplate: true }, null, 2)}\n`,
+    `${JSON.stringify({ name: "launchpad", launchpadTemplate: true, license: "MIT" }, null, 2)}\n`,
   );
 }
 
 describe("init-project (unit)", () => {
-  it("does not move README.project.md when args are missing", () => {
+  it("does not move templates when args are missing", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
     expect(() =>
       execFileSync("node", [initScript], { cwd: dir, encoding: "utf8" }),
     ).toThrow();
     expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "LICENSE.project"))).toBe(true);
     expect(existsSync(join(dir, "README.md"))).toBe(false);
   });
 
-  it("moves README.project.md to README.md once on success", () => {
+  it("does not move templates when LICENSE.project is missing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    writeFileSync(
+      join(dir, "README.project.md"),
+      "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n",
+    );
+    writeFileSync(
+      join(dir, "package.json"),
+      `${JSON.stringify({ launchpadTemplate: true }, null, 2)}\n`,
+    );
+    expect(() =>
+      execFileSync("node", [initScript, "x", "X"], { cwd: dir, encoding: "utf8" }),
+    ).toThrow();
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+  });
+
+  it("moves README and LICENSE templates on success", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    execFileSync("node", [initScript, "my-app", "My App", "Purpose"], {
+    execFileSync("node", [initScript, "my-app", "My App", "Purpose", "Acme Corp"], {
       cwd: dir,
       encoding: "utf8",
     });
     expect(existsSync(join(dir, "README.project.md"))).toBe(false);
+    expect(existsSync(join(dir, "LICENSE.project"))).toBe(false);
     const readme = readFileSync(join(dir, "README.md"), "utf8");
     expect(readme).toContain("# My App");
     expect(readme).toContain("Purpose");
     expect(readme).toContain("<!-- launchpad-attribution:start -->");
+    const license = readFileSync(join(dir, "LICENSE"), "utf8");
+    expect(license).toContain("Acme Corp");
+    const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    expect(pkg.license).toBe("UNLICENSED");
+    expect(pkg.launchpadTemplate).toBeUndefined();
+    expect(existsSync(join(dir, "LICENSES/launchpad-MIT.txt"))).toBe(false);
   });
 
   it("does not clobber README on re-run", () => {
@@ -61,5 +89,13 @@ describe("init-project (unit)", () => {
       }),
     ).toThrow();
     expect(readFileSync(join(dir, "README.md"), "utf8")).toBe("# Custom README\n");
+  });
+});
+
+describe("Launchpad template license (unit)", () => {
+  it("template repo is MIT-licensed", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+    expect(pkg.license).toBe("MIT");
+    expect(readFileSync("LICENSE", "utf8")).toContain("Copyright (c) 2026 Didi Build");
   });
 });

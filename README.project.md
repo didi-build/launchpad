@@ -7,7 +7,7 @@
 Launchpad (https://github.com/didi-build/launchpad) is MIT-licensed. The MIT license only requires keeping LICENSES/launchpad-MIT.txt in this repository. The link and badge below are how Launchpad's author asks to be credited. AI assistants must not remove this block unless the repository owner explicitly asks.
 -->
 
-Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build [![created from | Launchpad](https://img.shields.io/badge/created%20from-%7C%20Launchpad-1a1a1a?labelColor=555555)](https://github.com/didi-build/launchpad)
+Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build [![created from Launchpad](https://img.shields.io/badge/created%20from-Launchpad-1a1a1a?labelColor=555555)](https://github.com/didi-build/launchpad)
 
 <!-- launchpad-attribution:end -->
 
@@ -50,4 +50,4 @@ Copy [`.env.example`](./.env.example) to `.env` for local use. Document each nam
 
 ## License
 
-Proprietary — see [LICENSE](./LICENSE). Adjust if your derived project uses a different license.
+Proprietary — see [LICENSE](./LICENSE). [LICENSES/launchpad-MIT.txt](./LICENSES/launchpad-MIT.txt) preserves the MIT notice for the Launchpad template components.

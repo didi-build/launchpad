@@ -17,6 +17,10 @@ describe("repo-settings on derived project (unit)", () => {
       "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n",
     );
     writeFileSync(
+      join(dir, "LICENSE.project"),
+      "Copyright (c) {{PROJECT_YEAR}} {{PROJECT_OWNER}}. All rights reserved.\n",
+    );
+    writeFileSync(
       join(dir, "package.json"),
       `${JSON.stringify({ name: "launchpad", launchpadTemplate: true }, null, 2)}\n`,
     );
@@ -31,6 +35,7 @@ describe("repo-settings on derived project (unit)", () => {
     });
     expect(out).toContain("Dry run");
     expect(out).toContain("required_approving_review_count");
+    expect(out).toContain('"strict": false');
     expect(out).toContain("LAUNCHPAD_JSON");
   });
 });

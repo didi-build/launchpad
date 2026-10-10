@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { ensureDependabotAutomergeLabel } from "./lib/dependabot-label.mjs";
 import {
   defaultBranch,
@@ -15,36 +15,75 @@ const positional = args.filter((a) => !a.startsWith("--"));
 const branchName = positional[0] ?? defaultBranch;
 
 function ghJson(ghArgs) {
-  const out = execFileSync("gh", ghArgs, { encoding: "utf8" });
-  return JSON.parse(out);
+  const result = runGh(ghArgs);
+  if (!result.ok) {
+    throw new Error(formatGhFailure("gh", result));
+  }
+  return JSON.parse(result.stdout);
+}
+
+function runGh(ghArgs, input) {
+  const result = spawnSync("gh", ghArgs, {
+    encoding: "utf8",
+    input,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  return {
+    ok: result.status === 0,
+    status: result.status ?? 1,
+    stdout: result.stdout?.trim() ?? "",
+    stderr: result.stderr?.trim() ?? "",
+  };
 }
 
 function ghApi(method, endpoint, body) {
   const ghArgs = ["api", "-X", method, endpoint];
   if (body !== undefined) {
     ghArgs.push("--input", "-");
-    execFileSync("gh", ghArgs, {
-      input: JSON.stringify(body),
-      stdio: ["pipe", "inherit", "inherit"],
-    });
-    return null;
   }
-  try {
-    const out = execFileSync("gh", ghArgs, { encoding: "utf8" });
-    return out ? JSON.parse(out) : null;
-  } catch {
-    return null;
+  const result = runGh(ghArgs, body !== undefined ? JSON.stringify(body) : undefined);
+  if (!result.ok) {
+    throw new Error(formatGhFailure(`${method} ${endpoint}`, result));
   }
+  return result.stdout ? JSON.parse(result.stdout) : null;
+}
+
+function formatGhFailure(label, result) {
+  const detail = result.stderr || result.stdout || `exit ${result.status}`;
+  return `${label} failed (${result.status}): ${detail}`;
+}
+
+function readProtection(endpoint) {
+  const result = runGh(["api", "-X", "GET", endpoint]);
+  if (result.ok) {
+    return {
+      readable: true,
+      value: result.stdout ? JSON.parse(result.stdout) : null,
+    };
+  }
+  if (result.status === 404) {
+    return { readable: false, reason: "no branch protection configured (HTTP 404)" };
+  }
+  if (result.status === 403) {
+    return {
+      readable: false,
+      reason:
+        "could not read branch protection (HTTP 403 — auth, plan, or token scope)",
+    };
+  }
+  return {
+    readable: false,
+    reason: `could not read branch protection (HTTP ${result.status}: ${result.stderr || result.stdout})`,
+  };
 }
 
 let repo = process.env.GITHUB_REPOSITORY;
 if (!repo) {
   try {
     repo = ghJson(["repo", "view", "--json", "nameWithOwner"]).nameWithOwner;
-  } catch {
-    console.error(
-      "Could not resolve repository. Set GITHUB_REPOSITORY or run with `gh` authenticated.",
-    );
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : "Could not resolve repository.");
+    console.error("Set GITHUB_REPOSITORY or run with `gh` authenticated.");
     process.exit(1);
   }
 }
@@ -65,24 +104,27 @@ function printDryRunCommand(method, endpoint, body) {
 }
 
 function fetchActual() {
-  const protectionActual = ghApi("GET", protectionEndpoint);
+  const protectionRead = readProtection(protectionEndpoint);
   const repoActual = ghJson([
     "api",
     `repos/${repo}`,
     "--jq",
     "{allow_auto_merge: .allow_auto_merge, delete_branch_on_merge: .delete_branch_on_merge}",
   ]);
-  return { protectionActual, repoActual };
+  return { protectionRead, repoActual };
 }
 
 function reportVerify() {
-  const { protectionActual, repoActual } = fetchActual();
+  const { protectionRead, repoActual } = fetchActual();
   let ok = true;
-  if (!protectionMatches(protectionActual, protection)) {
+  if (!protectionRead.readable) {
+    ok = false;
+    console.error(`❌ Branch protection: ${protectionRead.reason}`);
+  } else if (!protectionMatches(protectionRead.value, protection)) {
     ok = false;
     console.error("❌ Branch protection does not match Launchpad defaults.");
     console.error("Expected:", JSON.stringify(protection, null, 2));
-    console.error("Actual:", JSON.stringify(protectionActual, null, 2));
+    console.error("Actual:", JSON.stringify(protectionRead.value, null, 2));
   } else {
     console.log(
       "✅ Branch protection matches (PR required, check job, zero approvals).",
@@ -106,11 +148,16 @@ if (verify) {
 }
 
 if (apply) {
-  ensureDependabotAutomergeLabel(repo);
-  ghApi("PUT", protectionEndpoint, protection);
-  console.log("Branch protection updated.");
-  ghApi("PATCH", `repos/${repo}`, repoSettings);
-  console.log("Repository settings updated (auto-merge, delete head branches).");
+  try {
+    ensureDependabotAutomergeLabel(repo);
+    ghApi("PUT", protectionEndpoint, protection);
+    console.log("Branch protection updated.");
+    ghApi("PATCH", `repos/${repo}`, repoSettings);
+    console.log("Repository settings updated (auto-merge, delete head branches).");
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
 } else if (!verify) {
   console.log("Dry run — pass --apply to execute or --verify to check:\n");
   printDryRunCommand("PUT", protectionEndpoint, protection);

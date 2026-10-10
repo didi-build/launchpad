@@ -21,7 +21,7 @@ describe("repo-settings-target (unit)", () => {
       protectionMatches(
         {
           required_status_checks: {
-            strict: true,
+            strict: false,
             checks: [{ context: "check" }],
           },
           enforce_admins: { enabled: false },

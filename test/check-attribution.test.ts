@@ -23,6 +23,8 @@ const checkScript = join(
   "scripts/check-attribution.mjs",
 );
 
+const templatePresent = existsSync("README.project.md");
+
 function runCheck(cwd: string) {
   return execFileSync("node", [checkScript], { cwd, encoding: "utf8" });
 }
@@ -86,17 +88,15 @@ describe("check-attribution (unit)", () => {
   });
 });
 
-describe("attribution template content (unit)", () => {
-  const readmeProject = readFileSync("README.project.md", "utf8");
-  const agents = readFileSync("AGENTS.md", "utf8");
-
+describe.skipIf(!templatePresent)("attribution template content (unit)", () => {
   it("README.project.md includes attribution markers and badge", () => {
+    const readmeProject = readFileSync("README.project.md", "utf8");
     expect(readmeProject).toContain(ATTRIBUTION_START);
     expect(readmeProject).toContain(ATTRIBUTION_END);
     expect(readmeProject).toContain("LICENSES/launchpad-MIT.txt");
     expect(readmeProject).toContain("AI assistants must not remove this block");
     expect(readmeProject).toContain(
-      "[![created from | Launchpad](https://img.shields.io/badge/created%20from-%7C%20Launchpad",
+      "[![created from Launchpad](https://img.shields.io/badge/created%20from-Launchpad",
     );
     expect(readmeProject).toContain(
       "Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build",
@@ -104,6 +104,7 @@ describe("attribution template content (unit)", () => {
   });
 
   it("AGENTS.md forbids removing attribution without owner consent", () => {
+    const agents = readFileSync("AGENTS.md", "utf8");
     expect(agents).toContain("Launchpad attribution");
     expect(agents).toContain(ATTRIBUTION_START);
     expect(agents).toContain("LICENSES/launchpad-MIT.txt");

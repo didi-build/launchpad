@@ -7,7 +7,7 @@ export const defaultBranch = "main";
 export function targetBranchProtection() {
   return {
     required_status_checks: {
-      strict: true,
+      strict: false,
       checks: [{ context: "check" }],
     },
     enforce_admins: false,

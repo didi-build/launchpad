@@ -8,7 +8,7 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 1. On GitHub, click **Use this template** and create your repository.
 2. Clone your new repo and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md).
-3. Initialize the project (copies [README.project.md](./README.project.md) to `README.md` and replaces `{{…}}` placeholders):
+3. Initialize the project (moves [README.project.md](./README.project.md) and [LICENSE.project](./LICENSE.project) into place and replaces `{{…}}` placeholders):
 
    ```bash
    npm install
@@ -44,4 +44,4 @@ Open a PR against `didi-build/launchpad` and wait for review; do not merge your 
 
 ## License
 
-Proprietary — see [LICENSE](./LICENSE). Derived projects should align README, `package.json`, and LICENSE after `init-project` (see checklist).
+[MIT](./LICENSE) — Copyright (c) 2026 Didi Build. If you use this template, a link back to [Launchpad](https://github.com/didi-build/launchpad) is appreciated (derived repos get their own license via `init-project`).
