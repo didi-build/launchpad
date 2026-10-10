@@ -13,7 +13,7 @@ const initScript = join(
 function seedLaunchpadDir(root: string) {
   writeFileSync(
     join(root, "README.project.md"),
-    "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n",
+    "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n\n<!-- launchpad-attribution:start -->\n<!-- launchpad-attribution:end -->\n",
   );
   writeFileSync(
     join(root, "package.json"),
@@ -43,6 +43,7 @@ describe("init-project (unit)", () => {
     const readme = readFileSync(join(dir, "README.md"), "utf8");
     expect(readme).toContain("# My App");
     expect(readme).toContain("Purpose");
+    expect(readme).toContain("<!-- launchpad-attribution:start -->");
   });
 
   it("does not clobber README on re-run", () => {
