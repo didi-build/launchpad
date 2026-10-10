@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { ensureDependabotAutomergeLabel } from "./lib/dependabot-label.mjs";
 import {
+  branchProtectionReadFailureReason,
+  parseGhHttpStatus,
+} from "./lib/gh-api-errors.mjs";
+import {
   defaultBranch,
   protectionMatches,
   repositorySettingsMatch,
@@ -61,19 +65,10 @@ function readProtection(endpoint) {
       value: result.stdout ? JSON.parse(result.stdout) : null,
     };
   }
-  if (result.status === 404) {
-    return { readable: false, reason: "no branch protection configured (HTTP 404)" };
-  }
-  if (result.status === 403) {
-    return {
-      readable: false,
-      reason:
-        "could not read branch protection (HTTP 403 — auth, plan, or token scope)",
-    };
-  }
+  const httpStatus = parseGhHttpStatus(result.stderr);
   return {
     readable: false,
-    reason: `could not read branch protection (HTTP ${result.status}: ${result.stderr || result.stdout})`,
+    reason: branchProtectionReadFailureReason(httpStatus, result.stderr),
   };
 }
 

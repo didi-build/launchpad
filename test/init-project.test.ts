@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +16,8 @@ const initScript = join(
   "scripts/init-project.mjs",
 );
 
+const LAUNCHPAD_MIT_SNAPSHOT = "MIT snapshot for attribution check\n";
+
 function seedLaunchpadDir(root: string) {
   writeFileSync(
     join(root, "README.project.md"),
@@ -19,6 +27,8 @@ function seedLaunchpadDir(root: string) {
     join(root, "LICENSE.project"),
     "Copyright (c) {{PROJECT_YEAR}} {{PROJECT_OWNER}}. All rights reserved.\n",
   );
+  mkdirSync(join(root, "LICENSES"), { recursive: true });
+  writeFileSync(join(root, "LICENSES/launchpad-MIT.txt"), LAUNCHPAD_MIT_SNAPSHOT);
   writeFileSync(
     join(root, "package.json"),
     `${JSON.stringify({ name: "launchpad", launchpadTemplate: true, license: "MIT" }, null, 2)}\n`,
@@ -71,7 +81,9 @@ describe("init-project (unit)", () => {
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     expect(pkg.license).toBe("UNLICENSED");
     expect(pkg.launchpadTemplate).toBeUndefined();
-    expect(existsSync(join(dir, "LICENSES/launchpad-MIT.txt"))).toBe(false);
+    expect(readFileSync(join(dir, "LICENSES/launchpad-MIT.txt"), "utf8")).toBe(
+      LAUNCHPAD_MIT_SNAPSHOT,
+    );
   });
 
   it("does not clobber README on re-run", () => {
