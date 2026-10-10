@@ -1,0 +1,42 @@
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    name: automerge
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Merge green Dependabot PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prs="$(gh api "/repos/${REPOSITORY}/actions/runs/${RUN_ID}/pull_requests" --jq 'length')"
+          if [ "$prs" != "1" ]; then
+            echo "Expected exactly one PR for this workflow run (got ${prs}); skipping."
+            exit 0
+          fi
+          pr_number="$(gh api "/repos/${REPOSITORY}/actions/runs/${RUN_ID}/pull_requests" --jq '.[0].number')"
+          author="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json author --jq '.author.login')"
+          if [ "$author" != "dependabot[bot]" ]; then
+            echo "PR #${pr_number} author is ${author}; only Dependabot PRs auto-merge."
+            exit 0
+          fi
+          head="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json headRefName --jq '.headRefName')"
+          if [[ "$head" != dependabot/* ]]; then
+            echo "PR #${pr_number} head ${head} is not a dependabot/* branch; skipping."
+            exit 0
+          fi
+          echo "Auto-merging Dependabot PR #${pr_number} (${head}) after successful CI."
+          gh pr merge "$pr_number" --repo "$REPOSITORY" --squash --admin --delete-branch

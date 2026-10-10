@@ -38,16 +38,19 @@ This file is the single source of truth for how agents work in this repository. 
 
 - Keep PRs small and link the Linear ticket.
 - Describe what changed, why, and how you verified (include `npm run check`).
+- **Open a PR and wait for human review.** Do not merge your own PR unless the ticket explicitly says **merge when green**.
+- **Dependabot** dependency PRs are the exception: when CI passes, [Dependabot auto-merge](../.github/workflows/dependabot-automerge.yml) may merge them without a human review.
 
 ## Commands
 
-| Script                 | Purpose                                                           |
-| ---------------------- | ----------------------------------------------------------------- |
-| `npm run check`        | Format, lint, typecheck, test, secret scan, placeholder check     |
-| `npm run lint`         | ESLint                                                            |
-| `npm run format`       | Prettier write                                                    |
-| `npm run format:check` | Prettier check                                                    |
-| `npm run typecheck`    | `tsc --noEmit`                                                    |
-| `npm run test`         | Vitest (CI uses JUnit output)                                     |
-| `npm run secrets`      | Secretlint                                                        |
-| `npm run init-project` | Replace `{{…}}` placeholders after creating a repo from Launchpad |
+| Script                  | Purpose                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `npm run check`         | Format, lint, typecheck, test, secret scan, placeholder check       |
+| `npm run lint`          | ESLint                                                              |
+| `npm run format`        | Prettier write                                                      |
+| `npm run format:check`  | Prettier check                                                      |
+| `npm run typecheck`     | `tsc --noEmit`                                                      |
+| `npm run test`          | Vitest (CI uses JUnit output)                                       |
+| `npm run secrets`       | Secretlint                                                          |
+| `npm run init-project`  | Replace `{{…}}` placeholders after creating a repo from Launchpad   |
+| `npm run repo-settings` | Print (or with `--apply`, set) recommended GitHub branch protection |

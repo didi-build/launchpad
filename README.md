@@ -20,13 +20,15 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 ## Layout (template)
 
-| Path                       | Purpose                                              |
-| -------------------------- | ---------------------------------------------------- |
-| `README.project.md`        | Project README template swapped in by `init-project` |
-| `src/`, `test/`            | Minimal TypeScript + Vitest example                  |
-| `docs/`                    | Architecture, ADRs, runbooks, new-project checklist  |
-| `scripts/init-project.mjs` | Placeholder replacement and package rename           |
-| `.github/workflows/ci.yml` | PR/push CI and test-results comment                  |
+| Path                                         | Purpose                                                |
+| -------------------------------------------- | ------------------------------------------------------ |
+| `README.project.md`                          | Project README template swapped in by `init-project`   |
+| `src/`, `test/`                              | Minimal TypeScript + Vitest example                    |
+| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist    |
+| `scripts/init-project.mjs`                   | Placeholder replacement and package rename             |
+| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                    |
+| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception) |
+| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                 |
 
 ## Maintainer commands
 
@@ -38,7 +40,7 @@ npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
 
 ## Contributing to Launchpad
 
-Open a PR against `didi-build/launchpad`; do not merge your own PR unless the ticket explicitly says to. See [AGENTS.md](./AGENTS.md) for agent rules.
+Open a PR against `didi-build/launchpad` and wait for review; do not merge your own PR unless the ticket says **merge when green**. See [AGENTS.md](./AGENTS.md) for agent rules (Dependabot auto-merge is the only exception).
 
 ## License
 

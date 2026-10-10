@@ -5,8 +5,9 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 ## Repository settings (GitHub)
 
 - [ ] Mark the repo **private** (or public) per your org policy
-- [ ] Enable **branch protection** on `main`: require PR, require status check **CI** (or your workflow name), no direct pushes
-- [ ] Set **merge strategy** (squash or merge commit — pick one and document in a decision if needed)
+- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** to set branch protection: PR required, status check **`check`**, **1 approving review**
+- [ ] In GitHub settings, allow **GitHub Actions to bypass** required reviews so [Dependabot auto-merge](../.github/workflows/dependabot-automerge.yml) can merge when CI is green (agents and humans still need review)
+- [ ] Set **merge strategy** (squash matches auto-merge; document in a decision if you choose otherwise)
 - [ ] Enable **automatically delete head branches** after merge
 - [ ] Add collaborators / teams and optional [CODEOWNERS](../.github/CODEOWNERS)
 
@@ -29,7 +30,11 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 - [ ] Confirm the PR receives an **updated test-results comment** on push
 - [ ] Try committing a fake secret locally — pre-commit should block it
 
+## Dependabot
+
+- [ ] Confirm [`.github/dependabot.yml`](../.github/dependabot.yml) is present (weekly minor/patch groups, majors ignored, cooldown)
+- [ ] After the first grouped Dependabot PR opens, confirm **CI** runs and **auto-merge** lands it when green
+
 ## Optional
 
-- [ ] Enable Dependabot (`.github/dependabot.yml` is included)
 - [ ] Mark the **source** Launchpad repo as a GitHub template (already done for `didi-build/launchpad`)

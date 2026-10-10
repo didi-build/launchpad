@@ -20,6 +20,7 @@
     "secrets": "secretlint \"**/*\"",
     "placeholders": "node scripts/check-placeholders.mjs",
     "init-project": "node scripts/init-project.mjs",
+    "repo-settings": "node scripts/repo-settings.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
