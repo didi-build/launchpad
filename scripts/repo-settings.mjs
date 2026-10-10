@@ -1,12 +1,39 @@
 import { execFileSync } from "node:child_process";
+import {
+  defaultBranch,
+  protectionMatches,
+  repositorySettingsMatch,
+  targetBranchProtection,
+  targetRepositorySettings,
+} from "./lib/repo-settings-target.mjs";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
-const branch = args.find((a) => !a.startsWith("--")) ?? "main";
+const verify = args.includes("--verify");
+const positional = args.filter((a) => !a.startsWith("--"));
+const branchName = positional[0] ?? defaultBranch;
 
 function ghJson(ghArgs) {
   const out = execFileSync("gh", ghArgs, { encoding: "utf8" });
   return JSON.parse(out);
+}
+
+function ghApi(method, endpoint, body) {
+  const ghArgs = ["api", "-X", method, endpoint];
+  if (body !== undefined) {
+    ghArgs.push("--input", "-");
+    execFileSync("gh", ghArgs, {
+      input: JSON.stringify(body),
+      stdio: ["pipe", "inherit", "inherit"],
+    });
+    return null;
+  }
+  try {
+    const out = execFileSync("gh", ghArgs, { encoding: "utf8" });
+    return out ? JSON.parse(out) : null;
+  } catch {
+    return null;
+  }
 }
 
 let repo = process.env.GITHUB_REPOSITORY;
@@ -21,40 +48,68 @@ if (!repo) {
   }
 }
 
-const protection = {
-  required_status_checks: {
-    strict: true,
-    checks: [{ context: "check" }],
-  },
-  enforce_admins: false,
-  required_pull_request_reviews: {
-    required_approving_review_count: 1,
-    dismiss_stale_reviews: true,
-  },
-  restrictions: null,
-  allow_force_pushes: false,
-  allow_deletions: false,
-};
-
-const endpoint = `repos/${repo}/branches/${branch}/protection`;
+const protection = targetBranchProtection();
+const repoSettings = targetRepositorySettings();
+const protectionEndpoint = `repos/${repo}/branches/${branchName}/protection`;
 
 console.log(`Repository: ${repo}`);
-console.log(`Branch: ${branch}\n`);
+console.log(`Branch: ${branchName}\n`);
 
-if (apply) {
-  execFileSync("gh", ["api", "-X", "PUT", endpoint, "--input", "-"], {
-    input: JSON.stringify(protection),
-    stdio: ["pipe", "inherit", "inherit"],
-  });
-  console.log("Branch protection updated.");
-} else {
-  console.log("Dry run — pass --apply to execute:\n");
-  console.log(`gh api -X PUT ${endpoint} --input '${JSON.stringify(protection)}'\n`);
+function fetchActual() {
+  let protectionActual = null;
+  try {
+    protectionActual = ghApi("GET", protectionEndpoint);
+  } catch {
+    protectionActual = null;
+  }
+  const repoActual = ghJson([
+    "api",
+    `repos/${repo}`,
+    "--jq",
+    "{allow_auto_merge: .allow_auto_merge, delete_branch_on_merge: .delete_branch_on_merge}",
+  ]);
+  return { protectionActual, repoActual };
 }
 
-console.log(`Manual follow-ups (GitHub UI):
-- Settings → General → Pull Requests: delete head branches after merge
-- Settings → Actions → General: workflow read/write permissions
-- Branch rules: allow GitHub Actions to bypass required reviews for Dependabot auto-merge (see .github/workflows/dependabot-automerge.yml)
-- Required status check must match CI job name: check
-`);
+function reportVerify() {
+  const { protectionActual, repoActual } = fetchActual();
+  let ok = true;
+  if (!protectionMatches(protectionActual, protection)) {
+    ok = false;
+    console.error("❌ Branch protection does not match Launchpad defaults.");
+    console.error("Expected:", JSON.stringify(protection, null, 2));
+    console.error("Actual:", JSON.stringify(protectionActual, null, 2));
+  } else {
+    console.log("✅ Branch protection matches (PR required, check job, no reviews).");
+  }
+  if (!repositorySettingsMatch(repoActual, repoSettings)) {
+    ok = false;
+    console.error("❌ Repository merge settings do not match Launchpad defaults.");
+    console.error("Expected:", JSON.stringify(repoSettings, null, 2));
+    console.error("Actual:", JSON.stringify(repoActual, null, 2));
+  } else {
+    console.log(
+      "✅ Repository settings match (allow_auto_merge, delete_branch_on_merge).",
+    );
+  }
+  process.exit(ok ? 0 : 1);
+}
+
+if (verify) {
+  reportVerify();
+}
+
+if (apply) {
+  ghApi("PUT", protectionEndpoint, protection);
+  console.log("Branch protection updated.");
+  ghApi("PATCH", `repos/${repo}`, repoSettings);
+  console.log("Repository settings updated (auto-merge, delete head branches).");
+} else if (!verify) {
+  console.log("Dry run — pass --apply to execute or --verify to check:\n");
+  console.log(
+    `gh api -X PUT ${protectionEndpoint} --input '${JSON.stringify(protection)}'`,
+  );
+  console.log(
+    `gh api -X PATCH repos/${repo} --input '${JSON.stringify(repoSettings)}'`,
+  );
+}

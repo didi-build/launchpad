@@ -57,6 +57,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: github-actions[bot]
           body-includes: "<!-- launchpad-vitest-results -->"
+      # body-includes is only valid on find-comment (above), not create-or-update-comment
       - name: Update PR test results comment
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         if: always() && github.event_name == 'pull_request'

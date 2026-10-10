@@ -5,10 +5,9 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 ## Repository settings (GitHub)
 
 - [ ] Mark the repo **private** (or public) per your org policy
-- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** to set branch protection: PR required, status check **`check`**, **1 approving review**
-- [ ] In GitHub settings, allow **GitHub Actions to bypass** required reviews so [Dependabot auto-merge](../.github/workflows/dependabot-automerge.yml) can merge when CI is green (agents and humans still need review)
-- [ ] Set **merge strategy** (squash matches auto-merge; document in a decision if you choose otherwise)
-- [ ] Enable **automatically delete head branches** after merge
+- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **no required reviews**; enables **auto-merge** and **delete head branch on merge**
+- [ ] Run **`npm run repo-settings -- --verify`** and fix anything reported
+- [ ] Set **merge strategy** to **squash** (matches Dependabot auto-merge)
 - [ ] Add collaborators / teams and optional [CODEOWNERS](../.github/CODEOWNERS)
 
 ## Linear
@@ -33,6 +32,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 ## Dependabot
 
 - [ ] Confirm [`.github/dependabot.yml`](../.github/dependabot.yml) is present (weekly minor/patch groups, majors ignored, cooldown)
+- [ ] Leave repo variable **`DEPENDABOT_AUTOMERGE`** unset (enabled) or set to `false` to disable [auto-merge](../.github/workflows/dependabot-automerge.yml)
 - [ ] After the first grouped Dependabot PR opens, confirm **CI** runs and **auto-merge** lands it when green
 
 ## Optional
