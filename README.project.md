@@ -13,15 +13,17 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 
 ## Layout
 
-| Path                       | Why it exists                                                              |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `src/`                     | Application source (example: `greet.ts`)                                   |
-| `test/`                    | Tests mirror `src/`; one example unit test                                 |
-| `docs/`                    | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md) |
-| `AGENTS.md`                | Single source of truth for agent rules                                     |
-| `scripts/`                 | `init-project`, placeholder verification                                   |
-| `.github/workflows/ci.yml` | Same `npm run check` as local hooks                                        |
-| `.husky/`                  | Fast pre-commit checks + secret scan                                       |
+| Path                                                                             | Why it exists                                                                             |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `LICENSE`                                                                        | Project license (from `LICENSE.project` at init)                                          |
+| `LICENSES/launchpad-MIT.txt`                                                     | Preserved MIT notice for Launchpad template (required by `npm run check`)                 |
+| `src/`                                                                           | Application source (example: `greet.ts`)                                                  |
+| `test/`                                                                          | Tests mirror `src/`; one example unit test                                                |
+| `docs/`                                                                          | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md)                |
+| `AGENTS.md`                                                                      | Single source of truth for agent rules                                                    |
+| `scripts/`                                                                       | `init-project`, placeholder and attribution checks, `repo-settings`, `verify-action-pins` |
+| `.github/workflows/ci.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`), Dependabot config, and green Dependabot auto-merge                  |
+| `.husky/`                                                                        | Fast pre-commit checks + secret scan                                                      |
 
 ## Commands
 
@@ -30,6 +32,8 @@ npm install          # install deps and git hooks (prepare)
 npm run check        # format, lint, typecheck, test, secrets, placeholders, attribution
 npm run test         # vitest
 npm run test:watch   # vitest watch mode
+npm run repo-settings   # dry-run / --apply / --verify GitHub repo settings
+npm run verify-action-pins   # ensure workflow actions use pinned SHAs
 ```
 
 ## Git hooks

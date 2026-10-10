@@ -3,12 +3,6 @@ import {
   LAUNCHPAD_LICENSE_PATH,
 } from "./lib/launchpad-attribution.mjs";
 
-export {
-  ATTRIBUTION_END,
-  ATTRIBUTION_START,
-  LAUNCHPAD_LICENSE_PATH,
-} from "./lib/launchpad-attribution.mjs";
-
 const { failed, warnings, skipped } = checkAttribution(".");
 
 if (skipped) {

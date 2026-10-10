@@ -20,15 +20,18 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 ## Layout (template)
 
-| Path                                         | Purpose                                                |
-| -------------------------------------------- | ------------------------------------------------------ |
-| `README.project.md`                          | Project README template swapped in by `init-project`   |
-| `src/`, `test/`                              | Minimal TypeScript + Vitest example                    |
-| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist    |
-| `scripts/init-project.mjs`                   | Placeholder replacement and package rename             |
-| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                    |
-| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception) |
-| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                 |
+| Path                                         | Purpose                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `LICENSE`                                    | MIT license for the Launchpad template                              |
+| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`           |
+| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos) |
+| `README.project.md`                          | Project README template swapped in by `init-project`                |
+| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                 |
+| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                 |
+| `scripts/init-project.mjs`                   | Placeholder replacement and package rename                          |
+| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                 |
+| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)              |
+| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                              |
 
 ## Maintainer commands
 

@@ -32,5 +32,6 @@ describe("ci-test-summary (unit)", () => {
     });
     expect(body).toContain("**check**");
     expect(body).toContain("`success`");
+    expect(body).toContain("attribution");
   });
 });
