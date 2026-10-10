@@ -1,60 +1,50 @@
-# {{PROJECT_NAME}}
+# Launchpad
 
-{{PROJECT_PURPOSE}}
+**Launchpad** is the [didi-build](https://github.com/didi-build) GitHub template for new repositories. It ships repo hygiene, a documentation layout, [AGENTS.md](./AGENTS.md), and quality gates (`npm run check`, Husky, CI) so every project starts consistent.
 
-**Launchpad** is the GitHub template this repo was created from ([didi-build/launchpad](https://github.com/didi-build/launchpad)). It provides repo hygiene, documentation layout, [AGENTS.md](./AGENTS.md), and quality gates so new projects start consistent.
+This repository **is** the template: it stays green with `launchpadTemplate: true` in `package.json`, which skips placeholder verification until you run `init-project` in a derived repo.
 
-After creating your repo, run **`npm run init-project`** (see [New project](#new-project-from-launchpad)) to replace `{{…}}` placeholders and enable the placeholder check.
+## Use this template
 
-## Layout
-
-| Path                       | Why it exists                                                              |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `src/`                     | Application source (example: `greet.ts`)                                   |
-| `test/`                    | Tests mirror `src/`; one example unit test                                 |
-| `docs/`                    | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md) |
-| `AGENTS.md`                | Single source of truth for agent rules                                     |
-| `scripts/`                 | `init-project`, placeholder verification                                   |
-| `.github/workflows/ci.yml` | Same `npm run check` as local hooks                                        |
-| `.husky/`                  | Fast pre-commit checks + secret scan                                       |
-
-## Commands
-
-```bash
-npm install          # install deps and git hooks (prepare)
-npm run check        # format, lint, typecheck, test, secrets, placeholders
-npm run test         # vitest
-npm run test:watch   # vitest watch mode
-```
-
-Hooks run **lint-staged**, **typecheck**, **test**, and **secrets** on commit. CI runs the full **`check`** script on every PR and push to `main`.
-
-## Environment variables
-
-Copy [`.env.example`](./.env.example) to `.env` for local use. Document each name in README or `docs/architecture/`; document names only in `.env.example`; never commit values.
-
-## New project from Launchpad
-
-1. Use GitHub **Use this template** to create your repository.
-2. Complete [docs/new-project-checklist.md](./docs/new-project-checklist.md) (branch protection, Linear, etc.).
-3. Run:
+1. On GitHub, click **Use this template** and create your repository.
+2. Clone your new repo and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md).
+3. Initialize the project (moves [README.project.md](./README.project.md) and [LICENSE.project](./LICENSE.project) into place and replaces `{{…}}` placeholders):
 
    ```bash
-   npm run init-project -- my-app "My App" "One-line purpose"
    npm install
+   npm run init-project -- my-app "My App" "One-line purpose"
    npm run check
    ```
 
-4. Replace any remaining Launchpad-specific wording in README and docs.
+4. Replace any remaining Launchpad-specific wording in docs as needed.
 
-While `launchpadTemplate` is `true` in `package.json`, placeholder verification is skipped so the template repo stays green. `init-project` removes that flag and fails `check` if any `{{PROJECT_*}}` tokens remain.
+## Layout (template)
 
-## Adding checks or tools
+| Path                                         | Purpose                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `LICENSE`                                    | MIT license for the Launchpad template                              |
+| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`           |
+| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos) |
+| `README.project.md`                          | Project README template swapped in by `init-project`                |
+| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                 |
+| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                 |
+| `scripts/init-project.mjs`                   | Placeholder replacement and package rename                          |
+| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                 |
+| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)              |
+| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                              |
 
-- Extend `package.json` scripts and add them to `check`.
-- Mirror the same command in `.husky/pre-commit` only if it stays fast (seconds).
-- Update [AGENTS.md](./AGENTS.md) command table when scripts change.
+## Maintainer commands
+
+```bash
+npm install
+npm run check        # full gate (template skips placeholder check)
+npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
+```
+
+## Contributing to Launchpad
+
+Open a PR against `didi-build/launchpad` and wait for review; do not merge your own PR unless the ticket says **merge when green**. See [AGENTS.md](./AGENTS.md) for agent rules (Dependabot auto-merge is the only exception).
 
 ## License
 
-Proprietary — see [LICENSE](./LICENSE). Adjust if your derived project uses a different license.
+[MIT](./LICENSE) — Copyright (c) 2026 Didi Build. If you use this template, a link back to [Launchpad](https://github.com/didi-build/launchpad) is appreciated (derived repos get their own license via `init-project`).

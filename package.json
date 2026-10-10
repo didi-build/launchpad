@@ -3,14 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "description": "GitHub template: repo hygiene, docs, agent instructions, and quality gates for new projects.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "launchpadTemplate": true,
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run secrets && npm run placeholders",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run secrets && npm run placeholders && npm run attribution",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -19,7 +19,10 @@
     "test:watch": "vitest",
     "secrets": "secretlint \"**/*\"",
     "placeholders": "node scripts/check-placeholders.mjs",
+    "attribution": "node scripts/check-attribution.mjs",
     "init-project": "node scripts/init-project.mjs",
+    "repo-settings": "node scripts/repo-settings.mjs",
+    "verify-action-pins": "node scripts/verify-action-pins.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

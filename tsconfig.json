@@ -12,7 +12,16 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "scripts/lib/repo-settings-target.mjs",
+    "scripts/lib/launchpad-attribution.mjs",
+    "scripts/lib/gh-api-errors.mjs",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ]
 }

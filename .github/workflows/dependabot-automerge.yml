@@ -1,0 +1,90 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  qualify:
+    name: qualify
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/') &&
+      vars.DEPENDABOT_AUTOMERGE != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - name: Ensure auto-merge label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/ensure-dependabot-label.mjs
+      - name: Mark PR for auto-merge (minor/patch only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          label="launchpad-dependabot-automerge"
+          gh pr edit "$PR_NUMBER" --repo "$REPOSITORY" --remove-label "$label" 2>/dev/null || true
+          case "$UPDATE_TYPE" in
+            version-update:semver-minor|version-update:semver-patch)
+              echo "Qualifying PR #${PR_NUMBER} for auto-merge (${UPDATE_TYPE})."
+              gh pr edit "$PR_NUMBER" --repo "$REPOSITORY" --add-label "$label"
+              ;;
+            *)
+              echo "PR #${PR_NUMBER} update-type '${UPDATE_TYPE}' is not auto-merge eligible (majors and other types are excluded)."
+              ;;
+          esac
+
+  automerge:
+    name: automerge
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      vars.DEPENDABOT_AUTOMERGE != 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge for green Dependabot PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prs="$(gh api "/repos/${REPOSITORY}/actions/runs/${RUN_ID}/pull_requests" --jq 'length')"
+          if [ "$prs" != "1" ]; then
+            echo "Expected exactly one PR for this workflow run (got ${prs}); skipping."
+            exit 0
+          fi
+          pr_number="$(gh api "/repos/${REPOSITORY}/actions/runs/${RUN_ID}/pull_requests" --jq '.[0].number')"
+          author="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json author --jq '.author.login')"
+          if [ "$author" != "dependabot[bot]" ]; then
+            echo "PR #${pr_number} author is ${author}; only Dependabot PRs auto-merge."
+            exit 0
+          fi
+          head="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json headRefName --jq '.headRefName')"
+          if [[ "$head" != dependabot/* ]]; then
+            echo "PR #${pr_number} head ${head} is not a dependabot/* branch; skipping."
+            exit 0
+          fi
+          labels="$(gh pr view "$pr_number" --repo "$REPOSITORY" --json labels --jq '[.labels[].name] | join(",")')"
+          if [[ "$labels" != *"launchpad-dependabot-automerge"* ]]; then
+            echo "PR #${pr_number} is not qualified for auto-merge (missing launchpad-dependabot-automerge label)."
+            exit 0
+          fi
+          echo "Enabling auto-merge for Dependabot PR #${pr_number} (${head}) after successful CI."
+          gh pr merge "$pr_number" --repo "$REPOSITORY" --auto --squash --delete-branch
