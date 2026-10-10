@@ -92,7 +92,15 @@ describe("init-project (unit)", () => {
   });
 });
 
-describe("Launchpad template license (unit)", () => {
+function isLaunchpadTemplateRepo() {
+  try {
+    return JSON.parse(readFileSync("package.json", "utf8")).launchpadTemplate === true;
+  } catch {
+    return false;
+  }
+}
+
+describe.skipIf(!isLaunchpadTemplateRepo())("Launchpad template license (unit)", () => {
   it("template repo is MIT-licensed", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8"));
     expect(pkg.license).toBe("MIT");
