@@ -47,7 +47,7 @@ Copy [`.env.example`](./.env.example) to `.env` for local use. Document each nam
 
 4. Replace any remaining Launchpad-specific wording in README and docs.
 
-While `launchpadTemplate` is `true` in `package.json`, placeholder verification is skipped so the template repo stays green. `init-project` removes that flag and fails `check` if `{{PLACEHOLDERS}}` remain.
+While `launchpadTemplate` is `true` in `package.json`, placeholder verification is skipped so the template repo stays green. `init-project` removes that flag and fails `check` if any `{{PROJECT_*}}` tokens remain.
 
 ## Adding checks or tools
 
