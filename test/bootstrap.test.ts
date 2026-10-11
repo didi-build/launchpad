@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveBootstrapPlan,
   deriveInitArgs,
+  deriveProjectOwner,
   deriveSlug,
   isInitialized,
   planNeedsToken,
@@ -106,9 +107,18 @@ describe("bootstrap lib (unit)", () => {
     expect(deriveSlug("--hello--world--")).toBe("hello-world");
   });
 
-  it("deriveInitArgs builds display name and fallbacks", () => {
+  it("deriveProjectOwner maps didi-build and passes through other logins", () => {
+    expect(deriveProjectOwner("didi-build")).toBe("Didi Build");
+    expect(deriveProjectOwner("acme-corp")).toBe("acme-corp");
+  });
+
+  it("deriveInitArgs builds display name, purpose fallback, and owner from login", () => {
     expect(
-      deriveInitArgs({ repoName: "my_cool_app", description: "", owner: "" }),
+      deriveInitArgs({
+        repoName: "my_cool_app",
+        description: "",
+        repositoryOwnerLogin: "didi-build",
+      }),
     ).toEqual({
       slug: "my-cool-app",
       displayName: "My Cool App",
@@ -116,6 +126,13 @@ describe("bootstrap lib (unit)", () => {
         "Short description of what this project does — edit README and docs/architecture/overview.md.",
       owner: "Didi Build",
     });
+    expect(
+      deriveInitArgs({
+        repoName: "app",
+        description: "Purpose line",
+        repositoryOwnerLogin: "my-github-user",
+      }).owner,
+    ).toBe("my-github-user");
   });
 
   it("shouldExecuteBootstrap respects token policy", () => {

@@ -23,8 +23,6 @@ jobs:
       - name: Compute bootstrap plan
         id: plan
         env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
         run: node scripts/bootstrap.mjs plan
 
@@ -38,9 +36,7 @@ jobs:
       - name: Run bootstrap
         if: steps.plan.outputs.execute == 'true'
         env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
-          GITHUB_REPOSITORY_DESCRIPTION: ${{ github.event.repository.description }}
+          LAUNCHPAD_REPO_DESCRIPTION: ${{ github.event.repository.description }}
           GH_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
         run: node scripts/bootstrap.mjs run

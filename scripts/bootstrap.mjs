@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   deriveBootstrapPlan,
   deriveInitArgs,
@@ -11,6 +13,10 @@ import {
 } from "./lib/bootstrap.mjs";
 
 const mode = process.argv[2] ?? "run";
+const initProjectScript = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "init-project.mjs",
+);
 
 function parseRunAttempt(raw) {
   const n = Number.parseInt(String(raw ?? "1"), 10);
@@ -63,6 +69,20 @@ function appendStepSummary(lines) {
     return;
   }
   appendFileSync(path, `${lines.join("\n")}\n`);
+}
+
+function runInitProject(args) {
+  const result = spawnSync(process.execPath, [initProjectScript, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+  return result.status === 0;
 }
 
 function runNpm(args, extraEnv = {}) {
@@ -174,21 +194,20 @@ function handleRunMode() {
     process.exit(0);
   }
 
-  const { name: repoName } = repositoryParts();
-  const description = process.env.GITHUB_REPOSITORY_DESCRIPTION ?? "";
+  const { owner: repoOwnerLogin, name: repoName } = repositoryParts();
+  const description = process.env.LAUNCHPAD_REPO_DESCRIPTION ?? "";
+  const repositoryOwnerLogin =
+    process.env.GITHUB_REPOSITORY_OWNER?.trim() || repoOwnerLogin;
   const initArgs = deriveInitArgs({
     repoName,
     description,
-    owner: process.env.BOOTSTRAP_OWNER_DEFAULT,
+    repositoryOwnerLogin,
   });
 
   const summaryExtras = { ranInit: false, ranSettings: false, verifyOk: undefined };
 
   if (ctx.plan.init) {
-    const ok = runNpm([
-      "run",
-      "init-project",
-      "--",
+    const ok = runInitProject([
       initArgs.slug,
       initArgs.displayName,
       initArgs.purpose,

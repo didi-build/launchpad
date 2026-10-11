@@ -6,6 +6,21 @@ const DEFAULT_PURPOSE =
 const DEFAULT_OWNER = "Didi Build";
 
 /**
+ * @param {string | null | undefined} repositoryOwnerLogin
+ * @returns {string}
+ */
+export function deriveProjectOwner(repositoryOwnerLogin) {
+  const login = String(repositoryOwnerLogin ?? "").trim();
+  if (!login) {
+    return DEFAULT_OWNER;
+  }
+  if (login === "didi-build") {
+    return "Didi Build";
+  }
+  return login;
+}
+
+/**
  * @param {string} dir
  * @returns {boolean}
  */
@@ -80,10 +95,10 @@ export function deriveDisplayName(repoName) {
 }
 
 /**
- * @param {{ repoName: string; description?: string | null; owner?: string | null }} input
+ * @param {{ repoName: string; description?: string | null; repositoryOwnerLogin?: string | null }} input
  * @returns {{ slug: string; displayName: string; purpose: string; owner: string }}
  */
-export function deriveInitArgs({ repoName, description, owner }) {
+export function deriveInitArgs({ repoName, description, repositoryOwnerLogin }) {
   const slug = deriveSlug(repoName);
   const displayName = deriveDisplayName(repoName);
   const purpose =
@@ -92,11 +107,8 @@ export function deriveInitArgs({ repoName, description, owner }) {
     String(description).trim() !== ""
       ? String(description).trim()
       : DEFAULT_PURPOSE;
-  const ownerName =
-    owner !== undefined && owner !== null && String(owner).trim() !== ""
-      ? String(owner).trim()
-      : DEFAULT_OWNER;
-  return { slug, displayName, purpose, owner: ownerName };
+  const owner = deriveProjectOwner(repositoryOwnerLogin);
+  return { slug, displayName, purpose, owner };
 }
 
 /**
