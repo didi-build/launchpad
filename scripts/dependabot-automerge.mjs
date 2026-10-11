@@ -2,7 +2,18 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dependabotAutomergeLabel } from "./lib/dependabot-label.mjs";
 
-const DEPENDABOT_AUTHOR = "dependabot[bot]";
+/**
+ * GitHub's `gh pr view --json author` uses logins like `app/dependabot` for bots;
+ * webhook payloads and other APIs often use `dependabot[bot]`.
+ *
+ * @param {{ login: string; is_bot?: boolean }} author
+ */
+export function isDependabotAuthor({ login, is_bot }) {
+  if (login === "dependabot[bot]" || login === "app/dependabot") {
+    return true;
+  }
+  return login === "dependabot" && is_bot === true;
+}
 
 /**
  * @param {string | string[] | null | undefined} prNumbers
@@ -39,14 +50,14 @@ export function pickPrNumber(prNumbers) {
 }
 
 /**
- * @param {{ author: string; headRef: string; labels: string[] }} input
+ * @param {{ author: { login: string; is_bot?: boolean }; headRef: string; labels: string[] }} input
  * @returns {{ ok: true } | { ok: false; reason: string }}
  */
 export function isEligible({ author, headRef, labels }) {
-  if (author !== DEPENDABOT_AUTHOR) {
+  if (!isDependabotAuthor(author)) {
     return {
       ok: false,
-      reason: `PR author is ${author}; only Dependabot PRs auto-merge.`,
+      reason: `PR author is ${JSON.stringify(author)}; only Dependabot PRs auto-merge.`,
     };
   }
   if (!headRef.startsWith("dependabot/")) {
@@ -62,6 +73,20 @@ export function isEligible({ author, headRef, labels }) {
     };
   }
   return { ok: true };
+}
+
+/**
+ * @param {string} rawJsonString `gh pr view --json author,headRefName,labels` output
+ * @returns {{ ok: true } | { ok: false; reason: string }}
+ */
+export function evaluatePrJson(rawJsonString) {
+  const pr = JSON.parse(rawJsonString);
+  const labels = pr.labels.map((l) => l.name);
+  return isEligible({
+    author: pr.author,
+    headRef: pr.headRefName,
+    labels,
+  });
 }
 
 /** @param {string | null | undefined} stderr */
@@ -156,12 +181,7 @@ function main() {
     "author,headRefName,labels",
   ]);
   const pr = JSON.parse(raw);
-  const labels = pr.labels.map((l) => l.name);
-  const eligibility = isEligible({
-    author: pr.author.login,
-    headRef: pr.headRefName,
-    labels,
-  });
+  const eligibility = evaluatePrJson(raw);
 
   if (!eligibility.ok) {
     console.log(`PR #${prNumber}: ${eligibility.reason}`);
