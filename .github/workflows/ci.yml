@@ -32,6 +32,7 @@ jobs:
           cp -a . "$tmp/lp"
           cd "$tmp/lp"
           rm -rf node_modules .git
+          test -f .github/workflows/bootstrap.yml
           npm ci
           npm run init-project -- smoke-test "Smoke Test" "CI template smoke"
           npm ci

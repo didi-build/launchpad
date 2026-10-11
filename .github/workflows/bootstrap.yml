@@ -1,0 +1,49 @@
+name: Bootstrap
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bootstrap
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    if: github.repository != 'didi-build/launchpad'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require BOOTSTRAP_TOKEN org secret
+        env:
+          HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "${HAS_BOOTSTRAP_TOKEN}" != "true" ]; then
+            echo "::error::BOOTSTRAP_TOKEN is missing or empty. Add the org secret (shared with derived repos) before using this template."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.BOOTSTRAP_TOKEN }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Bootstrap derived repository
+        env:
+          GH_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
+          LAUNCHPAD_REPO_NAME: ${{ github.event.repository.name }}
+          LAUNCHPAD_REPO_DESCRIPTION: ${{ github.event.repository.description }}
+          LAUNCHPAD_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node scripts/bootstrap.mjs

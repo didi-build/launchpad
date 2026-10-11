@@ -6,17 +6,19 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 ## Use this template
 
-1. On GitHub, click **Use this template** and create your repository.
-2. Clone your new repo and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md).
-3. Initialize the project (moves [README.project.md](./README.project.md) and [LICENSE.project](./LICENSE.project) into place and replaces `{{…}}` placeholders):
+1. On GitHub, click **Use this template** and create your **public** repository (org secret **`BOOTSTRAP_TOKEN`** must be configured — see [docs/runbooks/bootstrap.md](./docs/runbooks/bootstrap.md)).
+2. Open **Actions** → **Bootstrap** on the new repo. The workflow runs `init-project`, commits to `main`, and applies Launchpad repo settings automatically.
+3. Clone when bootstrap is green and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md) for Linear, Dependabot, and remaining hygiene.
 
-   ```bash
-   npm install
-   npm run init-project -- my-app "My App" "One-line purpose"
-   npm run check
-   ```
+**Manual fallback** (if bootstrap fails):
 
-4. Replace any remaining Launchpad-specific wording in docs as needed.
+```bash
+npm install
+npm run init-project -- my-app "My App" "One-line purpose"
+npm run check
+npm run repo-settings -- --apply
+npm run repo-settings -- --verify
+```
 
 ## Layout (template)
 
@@ -29,6 +31,7 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 | `src/`, `test/`                              | Minimal TypeScript + Vitest example                                 |
 | `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                 |
 | `scripts/init-project.mjs`                   | Placeholder replacement and package rename                          |
+| `.github/workflows/bootstrap.yml`            | Auto `init-project` + `repo-settings` on new template repos         |
 | `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                 |
 | `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)              |
 | `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                              |

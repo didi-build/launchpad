@@ -1,12 +1,12 @@
 # New project checklist
 
-GitHub template repos copy **files only**. Complete these steps after creating a repository from [Launchpad](https://github.com/didi-build/launchpad).
+GitHub template repos copy **files only**. After creating a repository from [Launchpad](https://github.com/didi-build/launchpad), the [**Bootstrap** workflow](./runbooks/bootstrap.md) should run automatically on `main`. Use this checklist for anything bootstrap does not cover.
 
 ## Repository settings (GitHub)
 
-- [ ] Mark the repo **private** (or public) per your org policy
-- [ ] Run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **zero approvals**; creates Dependabot auto-merge label; enables **auto-merge** and **delete head branch on merge**
-- [ ] Run **`npm run repo-settings -- --verify`** and fix anything reported
+- [ ] Confirm **Bootstrap** succeeded (Actions → Bootstrap → green). It runs **`init-project`**, **`repo-settings --apply`**, and **`--verify`**.
+- [ ] If bootstrap failed, follow the [manual fallback](./runbooks/bootstrap.md#manual-fallback) or re-run the workflow (`workflow_dispatch`).
+- [ ] Mark the repo **public** or **private** per your org policy (Launchpad bootstrap expects the org **`BOOTSTRAP_TOKEN`** secret).
 - [ ] Set **merge strategy** to **squash** (matches Dependabot auto-merge)
 - [ ] Add collaborators / teams and optional [CODEOWNERS](../.github/CODEOWNERS)
 
@@ -17,7 +17,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Replace Launchpad placeholders
 
-- [ ] Run `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"]` — moves [README.project.md](../README.project.md) → `README.md` and [LICENSE.project](../LICENSE.project) → `LICENSE` (optional **owner** defaults to `Didi Build`)
+- [ ] Bootstrap should have run **`init-project`** already (moves [README.project.md](../README.project.md) → `README.md` and [LICENSE.project](../LICENSE.project) → `LICENSE`). If not, run it manually — see [bootstrap runbook](./runbooks/bootstrap.md#manual-fallback).
 - [ ] Confirm **`LICENSE`** and **`package.json` `license`** match your project (`UNLICENSED` + proprietary `LICENSE` is the default after init; adjust if you use another license)
 - [ ] Keep **`LICENSES/launchpad-MIT.txt`** (Launchpad MIT notice; required by `npm run check`)
 - [ ] Search for `Launchpad` / `launchpad` leftovers in README and docs
