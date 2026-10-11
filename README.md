@@ -9,10 +9,9 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 1. On GitHub, click **Use this template** and create your repository.
 2. Wait for the **Bootstrap** workflow on `main` to finish (runs `init-project`, commits, and applies [repo settings](./scripts/repo-settings.mjs)). See [docs/runbooks/bootstrap.md](./docs/runbooks/bootstrap.md).
 3. Clone your new repo and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md) for anything Bootstrap did not cover.
-
-**Outside the didi-build org:** Bootstrap needs a repository secret named `BOOTSTRAP_TOKEN` (fine-grained PAT with Administration, Contents, and Issues write). Without it, the workflow warns and you use the [manual init and repo-settings steps](./docs/new-project-checklist.md) instead.
-
 4. Replace any remaining Launchpad-specific wording in docs as needed.
+
+> **Outside the didi-build org:** Bootstrap needs a repository secret named `BOOTSTRAP_TOKEN` (fine-grained PAT with Administration, Contents, and Issues write). Without it, the workflow warns and you use the [manual init and repo-settings steps](./docs/new-project-checklist.md) instead.
 
 ## Layout (template)
 
