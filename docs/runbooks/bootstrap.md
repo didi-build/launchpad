@@ -49,6 +49,16 @@ Derived repos created outside **didi-build** do not receive this org secret. The
 - **Re-run jobs** on a failed Bootstrap workflow run (re-applies **settings** only if init already completed).
 - **Run workflow** manually from the Actions tab for the same behavior as a retry.
 
+### Troubleshooting: settings failed with invalid header
+
+If Bootstrap fails during `repo-settings` with `net/http: invalid header field value for "Authorization"` (or the job log only shows `repo-settings --apply failed.`):
+
+1. The org or repo secret `BOOTSTRAP_TOKEN` likely contains a stray newline, carriage return, or other invisible character (often pasted with a trailing line break).
+2. Open **Organization settings → Secrets and variables → Actions** (or the repository’s **Settings → Secrets and variables → Actions**), edit `BOOTSTRAP_TOKEN`, and paste the PAT again with **no quotes** and **no trailing whitespace**.
+3. Save the secret, then on the failed workflow run choose **Re-run jobs** (or **Run workflow** from the Bootstrap action).
+
+Bootstrap trims leading/trailing whitespace when possible and warns in the log; tokens with newlines or spaces **inside** the value are rejected before init or push run.
+
 ## Manual fallback
 
 If Bootstrap skips because no token is configured:

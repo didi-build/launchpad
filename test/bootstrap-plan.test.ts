@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -212,6 +219,100 @@ const initializedCases: PlanCase[] = [
     },
   },
 ];
+
+function installFakeNpm(dir: string) {
+  const bin = join(dir, "fake-bin");
+  mkdirSync(bin, { recursive: true });
+  const npmPath = join(bin, "npm");
+  writeFileSync(
+    npmPath,
+    `#!/bin/sh
+echo "fake-npm-invoked"
+exit 1
+`,
+  );
+  chmodSync(npmPath, 0o755);
+  return bin;
+}
+
+function runBootstrapRun(
+  dir: string,
+  env: Record<string, string>,
+  options: { fakeNpm?: boolean } = {},
+) {
+  const summaryPath = join(dir, "step-summary.md");
+  writeFileSync(summaryPath, "");
+  const fakeBin = options.fakeNpm ? installFakeNpm(dir) : "";
+  const result = spawnSync(process.execPath, [bootstrapScript, "run"], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GITHUB_STEP_SUMMARY: summaryPath,
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      PATH: fakeBin ? `${fakeBin}:${process.env.PATH ?? ""}` : process.env.PATH,
+      ...env,
+    },
+  });
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    summary: readFileSync(summaryPath, "utf8"),
+  };
+}
+
+describe("bootstrap run token sanitization (subprocess)", () => {
+  it("rejects tokens with embedded newlines before repo-settings", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bootstrap-run-token-"));
+    seedInitializedState(dir);
+
+    const result = runBootstrapRun(dir, {
+      GH_TOKEN: "ghp_inner\nnewline",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Malformed BOOTSTRAP_TOKEN");
+    expect(result.stdout + result.stderr).not.toContain("fake-npm-invoked");
+    expect(result.summary).toContain("malformed");
+  });
+
+  it("rejects an empty GH_TOKEN before repo-settings", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bootstrap-run-token-"));
+    seedInitializedState(dir);
+
+    const result = runBootstrapRun(dir, {
+      GH_TOKEN: "",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Malformed BOOTSTRAP_TOKEN");
+    expect(result.stdout + result.stderr).not.toContain("fake-npm-invoked");
+  });
+
+  it("warns on trimmed tokens and passes the sanitized value to repo-settings", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bootstrap-run-token-"));
+    seedInitializedState(dir);
+
+    const result = runBootstrapRun(
+      dir,
+      {
+        GH_TOKEN: "ghp_trimmed_value\n",
+      },
+      { fakeNpm: true },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toContain("::warning");
+    expect(result.stdout + result.stderr).toContain("trimmed");
+    expect(result.stdout + result.stderr).toContain("fake-npm-invoked");
+    expect(result.summary).toContain("repo-settings");
+  });
+});
 
 describe("bootstrap plan CLI (subprocess)", () => {
   for (const case_ of [...templateCases, ...initializedCases]) {

@@ -120,6 +120,28 @@ export function planNeedsToken(plan) {
 }
 
 /**
+ * Strip leading/trailing whitespace from a secret token and reject embedded control/whitespace.
+ *
+ * @param {string | null | undefined} raw
+ * @returns {{ token: string; trimmed: boolean; valid: boolean }}
+ */
+export function sanitizeToken(raw) {
+  const original = String(raw ?? "");
+  const token = original.trim();
+  const trimmed = token !== original;
+
+  if (token === "") {
+    return { token: "", trimmed, valid: false };
+  }
+
+  const hasInnerControlOrWhitespace = [...token].some((ch) => {
+    const code = ch.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f || /\s/.test(ch);
+  });
+  return { token, trimmed, valid: !hasInnerControlOrWhitespace };
+}
+
+/**
  * @param {{ planNeedsToken: boolean; hasToken: boolean; repositoryOwner: string }} input
  * @returns {"ok" | "warn-skip" | "fail"}
  */

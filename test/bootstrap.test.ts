@@ -18,6 +18,7 @@ import {
   isInitialized,
   planNeedsToken,
   resolveTokenPolicy,
+  sanitizeToken,
   shouldExecuteBootstrap,
 } from "../scripts/lib/bootstrap.mjs";
 
@@ -133,6 +134,39 @@ describe("bootstrap lib (unit)", () => {
         repositoryOwnerLogin: "my-github-user",
       }).owner,
     ).toBe("my-github-user");
+  });
+
+  it("sanitizeToken trims edges and rejects embedded control characters", () => {
+    expect(sanitizeToken("ghp_clean_token")).toEqual({
+      token: "ghp_clean_token",
+      trimmed: false,
+      valid: true,
+    });
+    expect(sanitizeToken("ghp_clean_token\n")).toEqual({
+      token: "ghp_clean_token",
+      trimmed: true,
+      valid: true,
+    });
+    expect(sanitizeToken("ghp_clean_token\r\n")).toEqual({
+      token: "ghp_clean_token",
+      trimmed: true,
+      valid: true,
+    });
+    expect(sanitizeToken(" ghp_clean_token")).toEqual({
+      token: "ghp_clean_token",
+      trimmed: true,
+      valid: true,
+    });
+    expect(sanitizeToken("ghp_bad\ninner")).toEqual({
+      token: "ghp_bad\ninner",
+      trimmed: false,
+      valid: false,
+    });
+    expect(sanitizeToken("")).toEqual({
+      token: "",
+      trimmed: false,
+      valid: false,
+    });
   });
 
   it("shouldExecuteBootstrap respects token policy", () => {
