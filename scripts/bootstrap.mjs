@@ -9,8 +9,16 @@ import {
   MANUAL_BOOTSTRAP_FALLBACK,
   planNeedsToken,
   resolveTokenPolicy,
+  sanitizeToken,
   shouldExecuteBootstrap,
 } from "./lib/bootstrap.mjs";
+
+const MALFORMED_BOOTSTRAP_TOKEN_ERROR =
+  "BOOTSTRAP_TOKEN is malformed: re-copy the PAT into the org/repo secret with no quotes, newlines, or spaces inside the value.";
+const TRIMMED_BOOTSTRAP_TOKEN_WARNING =
+  "BOOTSTRAP_TOKEN had leading or trailing whitespace; it was trimmed for this run. Re-save the secret without trailing whitespace.";
+const INVALID_AUTH_HEADER_HINT =
+  "If you see `invalid header field value` for Authorization, re-save BOOTSTRAP_TOKEN without trailing newlines or spaces, then Re-run jobs.";
 
 const mode = process.argv[2] ?? "run";
 const initProjectScript = join(
@@ -97,7 +105,50 @@ function runNpm(args, extraEnv = {}) {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }
-  return result.status === 0;
+  const combined = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  return {
+    ok: result.status === 0,
+    output: combined,
+  };
+}
+
+function invalidAuthHeaderHint(output) {
+  if (!output.includes("invalid header field value")) {
+    return "";
+  }
+  return `\n\n_Hint:_ ${INVALID_AUTH_HEADER_HINT}`;
+}
+
+/**
+ * @param {{ plan: { settings: boolean } }} ctx
+ * @returns {{ ghToken: string } | null}
+ */
+function resolveSanitizedGhToken(ctx) {
+  if (!ctx.plan.settings) {
+    return null;
+  }
+  const raw = process.env.GH_TOKEN ?? process.env.BOOTSTRAP_TOKEN ?? "";
+  const { token, trimmed, valid } = sanitizeToken(raw);
+  if (!valid) {
+    console.error(
+      `::error title=Malformed BOOTSTRAP_TOKEN::${MALFORMED_BOOTSTRAP_TOKEN_ERROR}`,
+    );
+    console.error(MALFORMED_BOOTSTRAP_TOKEN_ERROR);
+    appendStepSummary(
+      planSummaryMarkdown(ctx, {
+        skipped: true,
+        tokenError: MALFORMED_BOOTSTRAP_TOKEN_ERROR,
+      }),
+    );
+    process.exit(1);
+  }
+  if (trimmed) {
+    console.log(
+      `::warning title=BOOTSTRAP_TOKEN trimmed::${TRIMMED_BOOTSTRAP_TOKEN_WARNING.replaceAll("\n", "%0A")}`,
+    );
+    console.warn(TRIMMED_BOOTSTRAP_TOKEN_WARNING);
+  }
+  return { ghToken: token };
 }
 
 function runGit(args) {
@@ -142,6 +193,12 @@ function planSummaryMarkdown(ctx, extras = {}) {
   }
   if (extras.skipped) {
     lines.push("", "_Skipped (token policy)._");
+  }
+  if (extras.tokenError) {
+    lines.push("", `_${extras.tokenError}_`);
+  }
+  if (extras.settingsHint) {
+    lines.push("", extras.settingsHint);
   }
   return lines;
 }
@@ -193,6 +250,8 @@ function handleRunMode() {
     console.log("Bootstrap run skipped (nothing to execute).");
     process.exit(0);
   }
+
+  const tokenResolution = resolveSanitizedGhToken(ctx);
 
   const { owner: repoOwnerLogin, name: repoName } = repositoryParts();
   const description = process.env.LAUNCHPAD_REPO_DESCRIPTION ?? "";
@@ -247,25 +306,43 @@ function handleRunMode() {
   }
 
   if (ctx.plan.settings) {
-    const ghToken = process.env.GH_TOKEN ?? process.env.BOOTSTRAP_TOKEN;
+    const ghToken = tokenResolution?.ghToken;
     if (!ghToken) {
       console.error("GH_TOKEN is required for repo-settings.");
       process.exit(1);
     }
-    const applyOk = runNpm(["run", "repo-settings", "--", "--apply"], {
-      GH_TOKEN: ghToken,
-    });
-    if (!applyOk) {
-      console.error("repo-settings --apply failed.");
-      process.exit(1);
-    }
-    const verifyOk = runNpm(["run", "repo-settings", "--", "--verify"], {
+    const apply = runNpm(["run", "repo-settings", "--", "--apply"], {
       GH_TOKEN: ghToken,
     });
     summaryExtras.ranSettings = true;
-    summaryExtras.verifyOk = verifyOk;
-    if (!verifyOk) {
-      appendStepSummary(planSummaryMarkdown(ctx, summaryExtras));
+    if (!apply.ok) {
+      const hint = invalidAuthHeaderHint(apply.output);
+      console.error(
+        `repo-settings --apply failed.${hint ? ` ${INVALID_AUTH_HEADER_HINT}` : ""}`,
+      );
+      appendStepSummary(
+        planSummaryMarkdown(ctx, {
+          ...summaryExtras,
+          settingsHint: hint ? `_Hint:_ ${INVALID_AUTH_HEADER_HINT}` : undefined,
+        }),
+      );
+      process.exit(1);
+    }
+    const verify = runNpm(["run", "repo-settings", "--", "--verify"], {
+      GH_TOKEN: ghToken,
+    });
+    summaryExtras.verifyOk = verify.ok;
+    if (!verify.ok) {
+      const hint = invalidAuthHeaderHint(verify.output);
+      console.error(
+        `repo-settings --verify failed.${hint ? ` ${INVALID_AUTH_HEADER_HINT}` : ""}`,
+      );
+      appendStepSummary(
+        planSummaryMarkdown(ctx, {
+          ...summaryExtras,
+          settingsHint: hint ? `_Hint:_ ${INVALID_AUTH_HEADER_HINT}` : undefined,
+        }),
+      );
       process.exit(1);
     }
   }
