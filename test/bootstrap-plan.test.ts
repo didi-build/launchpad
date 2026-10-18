@@ -69,6 +69,8 @@ function runPlan(dir: string, env: Record<string, string>) {
   };
 }
 
+const templateDescription = "Example repository for bootstrap tests";
+
 const templateCases: PlanCase[] = [
   {
     name: "didi-build push attempt 1 with token",
@@ -79,6 +81,7 @@ const templateCases: PlanCase[] = [
       GITHUB_EVENT_NAME: "push",
       GITHUB_RUN_ATTEMPT: "1",
       HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: templateDescription,
     },
     expectStatus: 0,
     expectOutput: {
@@ -96,12 +99,43 @@ const templateCases: PlanCase[] = [
       GITHUB_EVENT_NAME: "push",
       GITHUB_RUN_ATTEMPT: "1",
       HAS_BOOTSTRAP_TOKEN: "false",
+      LAUNCHPAD_REPO_DESCRIPTION: templateDescription,
     },
     expectStatus: 1,
     expectOutput: {
       token_policy: "fail",
       execute: "false",
     },
+  },
+  {
+    name: "template init needed with empty repository description",
+    seed: "template",
+    env: {
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: "",
+    },
+    expectStatus: 1,
+    expectOutput: {},
+    stdoutIncludes: "This repository has no description",
+  },
+  {
+    name: "template init needed with whitespace-only repository description",
+    seed: "template",
+    env: {
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: "   ",
+    },
+    expectStatus: 1,
+    expectOutput: {},
+    stdoutIncludes: "This repository has no description",
   },
   {
     name: "other owner push attempt 1 without token",
@@ -112,6 +146,7 @@ const templateCases: PlanCase[] = [
       GITHUB_EVENT_NAME: "push",
       GITHUB_RUN_ATTEMPT: "1",
       HAS_BOOTSTRAP_TOKEN: "false",
+      LAUNCHPAD_REPO_DESCRIPTION: templateDescription,
     },
     expectStatus: 0,
     expectOutput: {
@@ -170,6 +205,24 @@ const initializedCases: PlanCase[] = [
     expectOutput: {
       settings: "true",
       execute: "true",
+    },
+  },
+  {
+    name: "initialized repo with empty repository description",
+    seed: "initialized",
+    env: {
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: "",
+    },
+    expectStatus: 0,
+    expectOutput: {
+      init: "false",
+      settings: "false",
+      execute: "false",
     },
   },
   {
@@ -330,7 +383,7 @@ describe("bootstrap plan CLI (subprocess)", () => {
         expect(result.output[key], `GITHUB_OUTPUT ${key}`).toBe(value);
       }
       if (case_.stdoutIncludes) {
-        expect(result.stdout).toContain(case_.stdoutIncludes);
+        expect(result.stdout + result.stderr).toContain(case_.stdoutIncludes);
       }
     });
   }

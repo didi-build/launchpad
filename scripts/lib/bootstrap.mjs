@@ -5,6 +5,24 @@ const DEFAULT_PURPOSE =
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
 const DEFAULT_OWNER = "Didi Build";
 
+export const MISSING_REPOSITORY_DESCRIPTION_MESSAGE =
+  "This repository has no description. Add one (repository page, About section), then run Actions, Bootstrap, Run workflow.";
+
+/**
+ * @param {string | null | undefined} description
+ * @returns {{ ok: true; purpose: string } | { ok: false; message: string }}
+ */
+export function resolveBootstrapRepositoryDescription(description) {
+  if (
+    description !== undefined &&
+    description !== null &&
+    String(description).trim() !== ""
+  ) {
+    return { ok: true, purpose: String(description).trim() };
+  }
+  return { ok: false, message: MISSING_REPOSITORY_DESCRIPTION_MESSAGE };
+}
+
 /**
  * @param {string | null | undefined} repositoryOwnerLogin
  * @returns {string}
@@ -95,18 +113,34 @@ export function deriveDisplayName(repoName) {
 }
 
 /**
- * @param {{ repoName: string; description?: string | null; repositoryOwnerLogin?: string | null }} input
+ * @param {{
+ *   repoName: string;
+ *   description?: string | null;
+ *   repositoryOwnerLogin?: string | null;
+ *   allowDefaultPurpose?: boolean;
+ * }} input
  * @returns {{ slug: string; displayName: string; purpose: string; owner: string }}
  */
-export function deriveInitArgs({ repoName, description, repositoryOwnerLogin }) {
+export function deriveInitArgs({
+  repoName,
+  description,
+  repositoryOwnerLogin,
+  allowDefaultPurpose = true,
+}) {
   const slug = deriveSlug(repoName);
   const displayName = deriveDisplayName(repoName);
-  const purpose =
+  let purpose;
+  if (
     description !== undefined &&
     description !== null &&
     String(description).trim() !== ""
-      ? String(description).trim()
-      : DEFAULT_PURPOSE;
+  ) {
+    purpose = String(description).trim();
+  } else if (allowDefaultPurpose) {
+    purpose = DEFAULT_PURPOSE;
+  } else {
+    throw new Error(MISSING_REPOSITORY_DESCRIPTION_MESSAGE);
+  }
   const owner = deriveProjectOwner(repositoryOwnerLogin);
   return { slug, displayName, purpose, owner };
 }

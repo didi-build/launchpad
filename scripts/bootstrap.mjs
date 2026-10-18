@@ -7,7 +7,9 @@ import {
   deriveInitArgs,
   isInitialized,
   MANUAL_BOOTSTRAP_FALLBACK,
+  MISSING_REPOSITORY_DESCRIPTION_MESSAGE,
   planNeedsToken,
+  resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   sanitizeToken,
   shouldExecuteBootstrap,
@@ -203,8 +205,31 @@ function planSummaryMarkdown(ctx, extras = {}) {
   return lines;
 }
 
+function failMissingRepositoryDescription(ctx) {
+  console.error(
+    `::error title=Repository description required::${MISSING_REPOSITORY_DESCRIPTION_MESSAGE}`,
+  );
+  console.error(MISSING_REPOSITORY_DESCRIPTION_MESSAGE);
+  appendStepSummary([
+    ...planSummaryMarkdown(ctx),
+    "",
+    `_${MISSING_REPOSITORY_DESCRIPTION_MESSAGE}_`,
+  ]);
+  process.exit(1);
+}
+
 function handlePlanMode() {
   const ctx = readPlanContext();
+
+  if (ctx.plan.init) {
+    const resolved = resolveBootstrapRepositoryDescription(
+      process.env.LAUNCHPAD_REPO_DESCRIPTION,
+    );
+    if (!resolved.ok) {
+      failMissingRepositoryDescription(ctx);
+    }
+  }
+
   const execute = shouldExecuteBootstrap(ctx);
 
   appendGithubOutput({
@@ -257,11 +282,25 @@ function handleRunMode() {
   const description = process.env.LAUNCHPAD_REPO_DESCRIPTION ?? "";
   const repositoryOwnerLogin =
     process.env.GITHUB_REPOSITORY_OWNER?.trim() || repoOwnerLogin;
-  const initArgs = deriveInitArgs({
-    repoName,
-    description,
-    repositoryOwnerLogin,
-  });
+  let initArgs;
+  if (ctx.plan.init) {
+    const resolved = resolveBootstrapRepositoryDescription(description);
+    if (!resolved.ok) {
+      failMissingRepositoryDescription(ctx);
+    }
+    initArgs = deriveInitArgs({
+      repoName,
+      description: resolved.purpose,
+      repositoryOwnerLogin,
+      allowDefaultPurpose: false,
+    });
+  } else {
+    initArgs = deriveInitArgs({
+      repoName,
+      description,
+      repositoryOwnerLogin,
+    });
+  }
 
   const summaryExtras = { ranInit: false, ranSettings: false, verifyOk: undefined };
 

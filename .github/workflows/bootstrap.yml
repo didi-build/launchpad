@@ -24,6 +24,7 @@ jobs:
         id: plan
         env:
           HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
+          LAUNCHPAD_REPO_DESCRIPTION: ${{ github.event.repository.description }}
         run: node scripts/bootstrap.mjs plan
 
       - name: Checkout with bootstrap token

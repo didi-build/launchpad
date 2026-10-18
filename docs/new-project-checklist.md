@@ -10,6 +10,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Repository settings (GitHub)
 
+- [ ] Set the **repository description** when creating the repo from the template (Bootstrap uses it for `package.json` and docs; init fails if it is missing)
 - [ ] Mark the repo **private** (or public) per your org policy
 - [ ] If Bootstrap did not run (no token), run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **zero approvals**; creates Dependabot auto-merge label; enables **auto-merge**, **delete head branch on merge**, and **squash-only** merges
 - [ ] If Bootstrap did not run, run **`npm run repo-settings -- --verify`** and fix anything reported
