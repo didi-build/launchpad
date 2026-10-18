@@ -108,6 +108,24 @@ const templateCases: PlanCase[] = [
     },
   },
   {
+    name: "didi-build push attempt 1 without token and empty repository description",
+    seed: "template",
+    env: {
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "false",
+      LAUNCHPAD_REPO_DESCRIPTION: "",
+    },
+    expectStatus: 1,
+    expectOutput: {
+      token_policy: "fail",
+      execute: "false",
+    },
+    stdoutIncludes: "BOOTSTRAP_TOKEN is required for didi-build",
+  },
+  {
     name: "template init needed with empty repository description",
     seed: "template",
     env: {
@@ -154,6 +172,24 @@ const templateCases: PlanCase[] = [
       execute: "false",
     },
     stdoutIncludes: "::warning",
+  },
+  {
+    name: "other owner push attempt 1 without token and empty repository description",
+    seed: "template",
+    env: {
+      GITHUB_REPOSITORY: "acme-corp/my-repo",
+      GITHUB_REPOSITORY_OWNER: "acme-corp",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "false",
+      LAUNCHPAD_REPO_DESCRIPTION: "",
+    },
+    expectStatus: 0,
+    expectOutput: {
+      token_policy: "warn-skip",
+      execute: "false",
+    },
+    stdoutIncludes: "Bootstrap skipped: no BOOTSTRAP_TOKEN repository secret",
   },
 ];
 

@@ -220,8 +220,9 @@ function failMissingRepositoryDescription(ctx) {
 
 function handlePlanMode() {
   const ctx = readPlanContext();
+  const execute = shouldExecuteBootstrap(ctx);
 
-  if (ctx.plan.init) {
+  if (ctx.plan.init && execute) {
     const resolved = resolveBootstrapRepositoryDescription(
       process.env.LAUNCHPAD_REPO_DESCRIPTION,
     );
@@ -229,8 +230,6 @@ function handlePlanMode() {
       failMissingRepositoryDescription(ctx);
     }
   }
-
-  const execute = shouldExecuteBootstrap(ctx);
 
   appendGithubOutput({
     init: String(ctx.plan.init),

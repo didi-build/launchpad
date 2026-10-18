@@ -6,7 +6,7 @@ Launchpad-derived repositories run the **Bootstrap** workflow automatically. It 
 
 On eligible runs, Bootstrap:
 
-1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). Only when the repo is still a template checkout. **The GitHub repository description must be set** before the first Bootstrap run; if it is empty, the plan step fails with a clear message (already-initialized repos are not affected).
+1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). Only when the repo is still a template checkout. **When Bootstrap will actually run init**, the GitHub repository description must be set; if it is empty, the plan step fails with a clear message (skipped runs and already-initialized repos are not affected).
 2. Commits the result to the default branch as `github-actions[bot]` (including removing Launchpad example code and setting `package.json` `description` from the repo purpose).
 3. Runs `npm run repo-settings -- --apply` then `-- --verify` using the bootstrap token (branch protection, auto-merge, delete head branches, squash-only merges).
 
