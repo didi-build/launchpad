@@ -16,7 +16,9 @@ import {
   deriveProjectOwner,
   deriveSlug,
   isInitialized,
+  MISSING_REPOSITORY_DESCRIPTION_MESSAGE,
   planNeedsToken,
+  resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   sanitizeToken,
   shouldExecuteBootstrap,
@@ -113,7 +115,7 @@ describe("bootstrap lib (unit)", () => {
     expect(deriveProjectOwner("acme-corp")).toBe("acme-corp");
   });
 
-  it("deriveInitArgs builds display name, purpose fallback, and owner from login", () => {
+  it("deriveInitArgs builds display name, manual purpose fallback, and owner from login", () => {
     expect(
       deriveInitArgs({
         repoName: "my_cool_app",
@@ -134,6 +136,36 @@ describe("bootstrap lib (unit)", () => {
         repositoryOwnerLogin: "my-github-user",
       }).owner,
     ).toBe("my-github-user");
+  });
+
+  it("deriveInitArgs rejects missing description when default purpose is disabled", () => {
+    expect(() =>
+      deriveInitArgs({
+        repoName: "app",
+        description: "",
+        allowDefaultPurpose: false,
+      }),
+    ).toThrow(MISSING_REPOSITORY_DESCRIPTION_MESSAGE);
+    expect(() =>
+      deriveInitArgs({
+        repoName: "app",
+        description: "   ",
+        allowDefaultPurpose: false,
+      }),
+    ).toThrow(MISSING_REPOSITORY_DESCRIPTION_MESSAGE);
+  });
+
+  it("resolveBootstrapRepositoryDescription requires a non-empty description", () => {
+    for (const description of ["", "   ", null, undefined]) {
+      expect(resolveBootstrapRepositoryDescription(description)).toEqual({
+        ok: false,
+        message: MISSING_REPOSITORY_DESCRIPTION_MESSAGE,
+      });
+    }
+    expect(resolveBootstrapRepositoryDescription("  Real purpose  ")).toEqual({
+      ok: true,
+      purpose: "Real purpose",
+    });
   });
 
   it("sanitizeToken trims edges and rejects embedded control characters", () => {

@@ -17,8 +17,8 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `LICENSE`                                                                        | Project license (from `LICENSE.project` at init)                                          |
 | `LICENSES/launchpad-MIT.txt`                                                     | Preserved MIT notice for Launchpad template (required by `npm run check`)                 |
-| `src/`                                                                           | Application source (example: `greet.ts`)                                                  |
-| `test/`                                                                          | Tests mirror `src/`; one example unit test                                                |
+| `src/`                                                                           | Application source (`src/.gitkeep` until you add code)                                    |
+| `test/`                                                                          | Vitest tests (script and integration tests under `test/`)                                 |
 | `docs/`                                                                          | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md)                |
 | `AGENTS.md`                                                                      | Single source of truth for agent rules                                                    |
 | `scripts/`                                                                       | `init-project`, placeholder and attribution checks, `repo-settings`, `verify-action-pins` |

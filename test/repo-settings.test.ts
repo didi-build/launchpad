@@ -11,6 +11,8 @@ describe("repo-settings (unit)", () => {
     expect(out).toContain("required_approving_review_count");
     expect(out).toContain("--input -");
     expect(out).toContain("allow_auto_merge");
+    expect(out).toContain("allow_squash_merge");
+    expect(out).toContain('"allow_merge_commit": false');
     expect(out).toContain('"check"');
   });
 });

@@ -6,9 +6,9 @@ Launchpad-derived repositories run the **Bootstrap** workflow automatically. It 
 
 On eligible runs, Bootstrap:
 
-1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). Only when the repo is still a template checkout.
-2. Commits the result to the default branch as `github-actions[bot]`.
-3. Runs `npm run repo-settings -- --apply` then `-- --verify` using the bootstrap token.
+1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). Only when the repo is still a template checkout. **When Bootstrap will actually run init**, the GitHub repository description must be set; if it is empty, the plan step fails with a clear message (skipped runs and already-initialized repos are not affected).
+2. Commits the result to the default branch as `github-actions[bot]` (including removing Launchpad example code and setting `package.json` `description` from the repo purpose).
+3. Runs `npm run repo-settings -- --apply` then `-- --verify` using the bootstrap token (branch protection, auto-merge, delete head branches, squash-only merges).
 
 The workflow does **not** run `npm ci` or install dependencies in the bootstrap job (the PAT is stored in `.git/config` by `actions/checkout`; no install scripts may run in that job).
 
@@ -46,8 +46,15 @@ Derived repos created outside **didi-build** do not receive this org secret. The
 
 ### Retry a failed run
 
-- **Re-run jobs** on a failed Bootstrap workflow run (re-applies **settings** only if init already completed).
-- **Run workflow** manually from the Actions tab for the same behavior as a retry.
+- **Re-run jobs** on a failed Bootstrap workflow run (re-applies **settings** only if init already completed). Re-run reuses the original event payload, so it does **not** pick up a repository description you added after the failure.
+- **Run workflow** manually from the Actions tab to retry with the **current** repository description and settings (use this after fixing a missing description).
+
+### Missing repository description
+
+If Bootstrap fails in the plan step with _This repository has no description_:
+
+1. Open the repository on GitHub, edit **About** (repository description), and save a one-line summary.
+2. In **Actions → Bootstrap**, choose **Run workflow** (not **Re-run jobs**) so the workflow sees the updated description.
 
 ### Troubleshooting: settings failed with invalid header
 

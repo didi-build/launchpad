@@ -20,11 +20,14 @@ export function targetBranchProtection() {
   };
 }
 
-/** @returns {{ allow_auto_merge: boolean; delete_branch_on_merge: boolean }} */
+/** @returns {{ allow_auto_merge: boolean; delete_branch_on_merge: boolean; allow_squash_merge: boolean; allow_merge_commit: boolean; allow_rebase_merge: boolean }} */
 export function targetRepositorySettings() {
   return {
     allow_auto_merge: true,
     delete_branch_on_merge: true,
+    allow_squash_merge: true,
+    allow_merge_commit: false,
+    allow_rebase_merge: false,
   };
 }
 
@@ -60,6 +63,9 @@ export function protectionMatches(actual, expected) {
 export function repositorySettingsMatch(actual, expected) {
   return (
     actual.allow_auto_merge === expected.allow_auto_merge &&
-    actual.delete_branch_on_merge === expected.delete_branch_on_merge
+    actual.delete_branch_on_merge === expected.delete_branch_on_merge &&
+    actual.allow_squash_merge === expected.allow_squash_merge &&
+    actual.allow_merge_commit === expected.allow_merge_commit &&
+    actual.allow_rebase_merge === expected.allow_rebase_merge
   );
 }

@@ -34,6 +34,24 @@ jobs:
           rm -rf node_modules .git
           npm ci
           npm run init-project -- smoke-test "Smoke Test" "CI template smoke"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            if (pkg.description !== 'CI template smoke') {
+              console.error('package.json description mismatch:', pkg.description);
+              process.exit(1);
+            }
+            for (const f of ['src/greet.ts', 'test/greet.test.ts']) {
+              if (fs.existsSync(f)) {
+                console.error('example file still present:', f);
+                process.exit(1);
+              }
+            }
+            if (!fs.existsSync('src/.gitkeep')) {
+              console.error('missing src/.gitkeep');
+              process.exit(1);
+            }
+          "
           npm ci
           npm run check
 
