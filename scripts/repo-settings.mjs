@@ -104,7 +104,7 @@ function fetchActual() {
     "api",
     `repos/${repo}`,
     "--jq",
-    "{allow_auto_merge: .allow_auto_merge, delete_branch_on_merge: .delete_branch_on_merge}",
+    "{allow_auto_merge: .allow_auto_merge, delete_branch_on_merge: .delete_branch_on_merge, allow_squash_merge: .allow_squash_merge, allow_merge_commit: .allow_merge_commit, allow_rebase_merge: .allow_rebase_merge}",
   ]);
   return { protectionRead, repoActual };
 }
@@ -132,7 +132,7 @@ function reportVerify() {
     console.error("Actual:", JSON.stringify(repoActual, null, 2));
   } else {
     console.log(
-      "✅ Repository settings match (allow_auto_merge, delete_branch_on_merge).",
+      "✅ Repository settings match (auto-merge, delete head branches, squash-only merges).",
     );
   }
   process.exit(ok ? 0 : 1);
@@ -148,7 +148,9 @@ if (apply) {
     ghApi("PUT", protectionEndpoint, protection);
     console.log("Branch protection updated.");
     ghApi("PATCH", `repos/${repo}`, repoSettings);
-    console.log("Repository settings updated (auto-merge, delete head branches).");
+    console.log(
+      "Repository settings updated (auto-merge, delete head branches, squash-only merges).",
+    );
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);

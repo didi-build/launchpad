@@ -40,9 +40,22 @@ describe("repo-settings-target (unit)", () => {
     const expected = targetRepositorySettings();
     expect(
       repositorySettingsMatch(
-        { allow_auto_merge: true, delete_branch_on_merge: true },
+        {
+          allow_auto_merge: true,
+          delete_branch_on_merge: true,
+          allow_squash_merge: true,
+          allow_merge_commit: false,
+          allow_rebase_merge: false,
+        },
         expected,
       ),
     ).toBe(true);
+  });
+
+  it("requires squash-only merge settings", () => {
+    const expected = targetRepositorySettings();
+    expect(expected.allow_squash_merge).toBe(true);
+    expect(expected.allow_merge_commit).toBe(false);
+    expect(expected.allow_rebase_merge).toBe(false);
   });
 });

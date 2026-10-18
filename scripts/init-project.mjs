@@ -1,8 +1,10 @@
 import {
+  mkdirSync,
   readFileSync,
   readdirSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -94,9 +96,19 @@ for (const file of textFiles) {
 const pkgPath = "package.json";
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 pkg.name = slug;
+pkg.description = purpose;
 pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];
+for (const file of exampleFiles) {
+  if (statSync(file, { throwIfNoEntry: false })?.isFile()) {
+    unlinkSync(file);
+  }
+}
+mkdirSync("src", { recursive: true });
+writeFileSync("src/.gitkeep", "");
 
 renameSync(README_TEMPLATE, "README.md");
 renameSync(LICENSE_TEMPLATE, "LICENSE");

@@ -31,7 +31,14 @@ function seedLaunchpadDir(root: string) {
   writeFileSync(join(root, "LICENSES/launchpad-MIT.txt"), LAUNCHPAD_MIT_SNAPSHOT);
   writeFileSync(
     join(root, "package.json"),
-    `${JSON.stringify({ name: "launchpad", launchpadTemplate: true, license: "MIT" }, null, 2)}\n`,
+    `${JSON.stringify({ name: "launchpad", launchpadTemplate: true, license: "MIT", description: "template" }, null, 2)}\n`,
+  );
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src/greet.ts"), "export function greet() {}\n");
+  mkdirSync(join(root, "test"), { recursive: true });
+  writeFileSync(
+    join(root, "test/greet.test.ts"),
+    "import { greet } from '../src/greet.js';\n",
   );
 }
 
@@ -80,7 +87,11 @@ describe("init-project (unit)", () => {
     expect(license).toContain("Acme Corp");
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
     expect(pkg.license).toBe("UNLICENSED");
+    expect(pkg.description).toBe("Purpose");
     expect(pkg.launchpadTemplate).toBeUndefined();
+    expect(existsSync(join(dir, "src/greet.ts"))).toBe(false);
+    expect(existsSync(join(dir, "test/greet.test.ts"))).toBe(false);
+    expect(existsSync(join(dir, "src/.gitkeep"))).toBe(true);
     expect(readFileSync(join(dir, "LICENSES/launchpad-MIT.txt"), "utf8")).toBe(
       LAUNCHPAD_MIT_SNAPSHOT,
     );
