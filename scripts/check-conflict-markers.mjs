@@ -67,6 +67,17 @@ export function scanFileForConflictMarkers(filePath, displayPath) {
 }
 
 /**
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+export function comparePathCodeUnits(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/**
  * @param {string} root
  * @returns {boolean}
  */
@@ -90,10 +101,13 @@ function isGitWorkTree(root) {
 function listFilesWithGit(root) {
   const out = execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard"],
-    { cwd: root, encoding: "utf8" },
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    { cwd: root, maxBuffer: 64 * 1024 * 1024 },
   );
-  return out.split(/\r?\n/).filter((line) => line.length > 0);
+  return out
+    .toString("utf8")
+    .split("\0")
+    .filter((line) => line.length > 0);
 }
 
 /**
@@ -107,7 +121,14 @@ function walkFiles(dir, root) {
   if (base !== "" && SKIP_WALK_DIRS.has(base)) {
     return [];
   }
-  const entries = readdirSync(dir, { withFileTypes: true });
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    const display = rel === "" ? "." : rel.split(/[/\\]/).join("/");
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`${display}: cannot read: ${message}`);
+  }
   const files = [];
   for (const entry of entries) {
     const full = join(dir, entry.name);
@@ -127,7 +148,12 @@ function walkFiles(dir, root) {
  */
 export function listFilesToScan(root) {
   if (isGitWorkTree(root)) {
-    return listFilesWithGit(root);
+    try {
+      return listFilesWithGit(root);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`.: cannot read: ${message}`);
+    }
   }
   return walkFiles(root, root);
 }
@@ -135,32 +161,55 @@ export function listFilesToScan(root) {
 /**
  * @param {string} root
  * @param {string[]} [onlyFiles] relative or absolute paths
- * @returns {{ path: string, line: number, text: string }[]}
+ * @returns {{ hits: { path: string, line: number, text: string }[], errors: { path: string, message: string }[] }}
  */
 export function findConflictMarkers(root, onlyFiles) {
   const absRoot = resolve(root);
-  const paths =
-    onlyFiles !== undefined && onlyFiles.length > 0
-      ? onlyFiles.map((f) => {
-          const abs = resolve(absRoot, f);
-          const rel = relative(absRoot, abs);
-          return { abs, display: rel.split(/[/\\]/).join("/") };
-        })
-      : listFilesToScan(absRoot).map((rel) => ({
-          abs: join(absRoot, rel),
-          display: rel.split(/[/\\]/).join("/"),
-        }));
+  const errors = [];
+  let paths;
+
+  if (onlyFiles !== undefined && onlyFiles.length > 0) {
+    paths = onlyFiles.map((f) => {
+      const abs = resolve(absRoot, f);
+      const rel = relative(absRoot, abs);
+      return { abs, display: rel.split(/[/\\]/).join("/") };
+    });
+  } else {
+    let relPaths;
+    try {
+      relPaths = listFilesToScan(absRoot);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes(": cannot read:")) {
+        const [pathPart, rest] = message.split(": cannot read:", 2);
+        errors.push({ path: pathPart, message: rest });
+      } else {
+        errors.push({ path: ".", message });
+      }
+      relPaths = [];
+    }
+    paths = relPaths.map((rel) => ({
+      abs: join(absRoot, rel),
+      display: rel.split(/[/\\]/).join("/"),
+    }));
+  }
 
   const hits = [];
   for (const { abs, display } of paths) {
     if (!existsSync(abs)) continue;
-    hits.push(...scanFileForConflictMarkers(abs, display));
+    try {
+      hits.push(...scanFileForConflictMarkers(abs, display));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push({ path: display, message });
+    }
   }
   hits.sort((a, b) => {
-    if (a.path !== b.path) return a.path.localeCompare(b.path);
+    const byPath = comparePathCodeUnits(a.path, b.path);
+    if (byPath !== 0) return byPath;
     return a.line - b.line;
   });
-  return hits;
+  return { hits, errors };
 }
 
 /**
@@ -176,11 +225,23 @@ export function formatConflictMarkerReport(hits) {
   return lines.join("\n");
 }
 
+/**
+ * @param {{ path: string, message: string }[]} errors
+ * @returns {string}
+ */
+export function formatConflictMarkerErrors(errors) {
+  return errors.map((e) => `${e.path}: cannot read: ${e.message}`).join("\n");
+}
+
 function runCli() {
   const root = process.cwd();
   const args = process.argv.slice(2);
   const onlyFiles = args.length > 0 ? args : undefined;
-  const hits = findConflictMarkers(root, onlyFiles);
+  const { hits, errors } = findConflictMarkers(root, onlyFiles);
+  if (errors.length > 0) {
+    console.error(formatConflictMarkerErrors(errors));
+    process.exit(1);
+  }
   if (hits.length === 0) {
     return;
   }
