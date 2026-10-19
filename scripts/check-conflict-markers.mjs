@@ -12,6 +12,19 @@ const MARKER_LINE_RE = /^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)(?: |$)/;
 const INSTRUCTION =
   "Resolve the conflict: keep or merge both sides, delete the marker lines, then re-run `npm run conflict-markers`. If you need to show a marker in documentation, indent it or build it in code.";
 
+export class CannotReadError extends Error {
+  /**
+   * @param {string} path
+   * @param {string} detail
+   */
+  constructor(path, detail) {
+    super(`${path}: cannot read: ${detail}`);
+    this.name = "CannotReadError";
+    this.path = path;
+    this.detail = detail;
+  }
+}
+
 /**
  * @param {string} line
  * @returns {boolean}
@@ -54,11 +67,16 @@ export function scanTextForConflictMarkers(text) {
 /**
  * @param {string} filePath
  * @param {string} displayPath
+ * @param {typeof readFileSync} [readFile]
  * @returns {{ path: string, line: number, text: string }[]}
  */
-export function scanFileForConflictMarkers(filePath, displayPath) {
+export function scanFileForConflictMarkers(
+  filePath,
+  displayPath,
+  readFile = readFileSync,
+) {
   if (shouldSkipFile(filePath)) return [];
-  const content = readFileSync(filePath, "utf8");
+  const content = readFile(filePath, "utf8");
   return scanTextForConflictMarkers(content).map((hit) => ({
     path: displayPath,
     line: hit.line,
@@ -127,7 +145,7 @@ function walkFiles(dir, root) {
   } catch (err) {
     const display = rel === "" ? "." : rel.split(/[/\\]/).join("/");
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`${display}: cannot read: ${message}`);
+    throw new CannotReadError(display, message);
   }
   const files = [];
   for (const entry of entries) {
@@ -152,7 +170,7 @@ export function listFilesToScan(root) {
       return listFilesWithGit(root);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`.: cannot read: ${message}`);
+      throw new CannotReadError(".", message);
     }
   }
   return walkFiles(root, root);
@@ -161,9 +179,12 @@ export function listFilesToScan(root) {
 /**
  * @param {string} root
  * @param {string[]} [onlyFiles] relative or absolute paths
+ * @param {{ readFile?: typeof readFileSync }} [options]
  * @returns {{ hits: { path: string, line: number, text: string }[], errors: { path: string, message: string }[] }}
  */
-export function findConflictMarkers(root, onlyFiles) {
+export function findConflictMarkers(root, onlyFiles, options = {}) {
+  /** @internal test hook */
+  const { readFile = readFileSync } = options;
   const absRoot = resolve(root);
   const errors = [];
   let paths;
@@ -179,11 +200,10 @@ export function findConflictMarkers(root, onlyFiles) {
     try {
       relPaths = listFilesToScan(absRoot);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes(": cannot read:")) {
-        const [pathPart, rest] = message.split(": cannot read:", 2);
-        errors.push({ path: pathPart, message: rest });
+      if (err instanceof CannotReadError) {
+        errors.push({ path: err.path, message: err.detail });
       } else {
+        const message = err instanceof Error ? err.message : String(err);
         errors.push({ path: ".", message });
       }
       relPaths = [];
@@ -198,7 +218,7 @@ export function findConflictMarkers(root, onlyFiles) {
   for (const { abs, display } of paths) {
     if (!existsSync(abs)) continue;
     try {
-      hits.push(...scanFileForConflictMarkers(abs, display));
+      hits.push(...scanFileForConflictMarkers(abs, display, readFile));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push({ path: display, message });
@@ -216,11 +236,19 @@ export function findConflictMarkers(root, onlyFiles) {
  * @param {{ path: string, line: number, text: string }[]} hits
  * @returns {string}
  */
-export function formatConflictMarkerReport(hits) {
-  const lines = hits.map((hit) => {
+export function formatConflictMarkerHitLines(hits) {
+  return hits.map((hit) => {
     const trimmed = hit.text.trimEnd().slice(0, 80);
     return `${hit.path}:${hit.line}: ${trimmed}`;
   });
+}
+
+/**
+ * @param {{ path: string, line: number, text: string }[]} hits
+ * @returns {string}
+ */
+export function formatConflictMarkerReport(hits) {
+  const lines = formatConflictMarkerHitLines(hits);
   lines.push(INSTRUCTION);
   return lines.join("\n");
 }
@@ -238,14 +266,20 @@ function runCli() {
   const args = process.argv.slice(2);
   const onlyFiles = args.length > 0 ? args : undefined;
   const { hits, errors } = findConflictMarkers(root, onlyFiles);
-  if (errors.length > 0) {
-    console.error(formatConflictMarkerErrors(errors));
-    process.exit(1);
-  }
-  if (hits.length === 0) {
+  if (hits.length === 0 && errors.length === 0) {
     return;
   }
-  console.error(formatConflictMarkerReport(hits));
+  const out = [];
+  if (hits.length > 0) {
+    out.push(...formatConflictMarkerHitLines(hits));
+  }
+  if (errors.length > 0) {
+    out.push(formatConflictMarkerErrors(errors));
+  }
+  if (hits.length > 0) {
+    out.push(INSTRUCTION);
+  }
+  console.error(out.join("\n"));
   process.exit(1);
 }
 

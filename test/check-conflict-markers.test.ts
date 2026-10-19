@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -150,13 +156,40 @@ describe("findConflictMarkers (unit)", () => {
     const dir = mkdtempSync(join(tmpdir(), "conflict-markers-eacces-"));
     const secret = join(dir, "secret.txt");
     writeFileSync(secret, "<<<<<<< HEAD\n");
-    chmodSync(secret, 0o000);
-    const { hits, errors } = findConflictMarkers(dir, ["secret.txt"]);
-    chmodSync(secret, 0o600);
+    const readFile = ((path, ...args) => {
+      if (path === secret) {
+        const err = new Error("EACCES: permission denied") as NodeJS.ErrnoException;
+        err.code = "EACCES";
+        throw err;
+      }
+      return readFileSync(path, ...args);
+    }) as typeof readFileSync;
+    const { hits, errors } = findConflictMarkers(dir, ["secret.txt"], { readFile });
     expect(hits).toEqual([]);
     expect(errors).toHaveLength(1);
     expect(errors[0].path).toBe("secret.txt");
     expect(errors[0].message).toMatch(/EACCES|permission denied/i);
+  });
+
+  it("reports marker hits and read errors together", () => {
+    const dir = mkdtempSync(join(tmpdir(), "conflict-markers-mixed-"));
+    writeFileSync(join(dir, "marked.txt"), "<<<<<<< HEAD\n");
+    const blocked = join(dir, "blocked.txt");
+    writeFileSync(blocked, "clean\n");
+    const readFile = ((path, ...args) => {
+      if (path === blocked) {
+        const err = new Error("EACCES: permission denied") as NodeJS.ErrnoException;
+        err.code = "EACCES";
+        throw err;
+      }
+      return readFileSync(path, ...args);
+    }) as typeof readFileSync;
+    const { hits, errors } = findConflictMarkers(dir, ["marked.txt", "blocked.txt"], {
+      readFile,
+    });
+    expect(hits).toEqual([{ path: "marked.txt", line: 1, text: "<<<<<<< HEAD" }]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].path).toBe("blocked.txt");
   });
 });
 
@@ -248,16 +281,23 @@ describe("check-conflict-markers CLI (subprocess)", () => {
     expect(onlyBad.status).toBe(1);
   });
 
-  it("exits 1 with cannot read when a file is not readable", () => {
-    const dir = mkdtempSync(join(tmpdir(), "conflict-markers-cli-eacces-"));
-    const secret = join(dir, "nope.txt");
-    writeFileSync(secret, "x\n");
-    chmodSync(secret, 0o000);
-    const result = runCli(dir, ["nope.txt"]);
-    chmodSync(secret, 0o600);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("nope.txt: cannot read:");
-  });
+  // Root can still read mode 0o000; on Windows chmod does not remove read permission.
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "exits 1 with cannot read when a file is not readable",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "conflict-markers-cli-eacces-"));
+      const secret = join(dir, "nope.txt");
+      writeFileSync(secret, "x\n");
+      chmodSync(secret, 0o000);
+      try {
+        const result = runCli(dir, ["nope.txt"]);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("nope.txt: cannot read:");
+      } finally {
+        chmodSync(secret, 0o600);
+      }
+    },
+  );
 });
 
 describe("formatConflictMarkerReport", () => {
