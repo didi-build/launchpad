@@ -13,23 +13,23 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 
 ## Layout
 
-| Path                                                                             | Why it exists                                                                             |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `LICENSE`                                                                        | Project license (from `LICENSE.project` at init)                                          |
-| `LICENSES/launchpad-MIT.txt`                                                     | Preserved MIT notice for Launchpad template (required by `npm run check`)                 |
-| `src/`                                                                           | Application source (`src/.gitkeep` until you add code)                                    |
-| `test/`                                                                          | Vitest tests (script and integration tests under `test/`)                                 |
-| `docs/`                                                                          | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md)                |
-| `AGENTS.md`                                                                      | Single source of truth for agent rules                                                    |
-| `scripts/`                                                                       | `init-project`, placeholder and attribution checks, `repo-settings`, `verify-action-pins` |
-| `.github/workflows/ci.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`), Dependabot config, and green Dependabot auto-merge                  |
-| `.husky/`                                                                        | Fast pre-commit checks + secret scan                                                      |
+| Path                                                                             | Why it exists                                                                                             |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `LICENSE`                                                                        | Project license (from `LICENSE.project` at init)                                                          |
+| `LICENSES/launchpad-MIT.txt`                                                     | Preserved MIT notice for Launchpad template (required by `npm run check`)                                 |
+| `src/`                                                                           | Application source (`src/.gitkeep` until you add code)                                                    |
+| `test/`                                                                          | Vitest tests (script and integration tests under `test/`)                                                 |
+| `docs/`                                                                          | Architecture, decisions, runbooks — see [docs/README.md](./docs/README.md)                                |
+| `AGENTS.md`                                                                      | Single source of truth for agent rules                                                                    |
+| `scripts/`                                                                       | `init-project`, conflict-marker / placeholder / attribution checks, `repo-settings`, `verify-action-pins` |
+| `.github/workflows/ci.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`), Dependabot config, and green Dependabot auto-merge                                  |
+| `.husky/`                                                                        | Fast pre-commit checks + secret scan                                                                      |
 
 ## Commands
 
 ```bash
 npm install          # install deps and git hooks (prepare)
-npm run check        # format, lint, typecheck, test, secrets, placeholders, attribution
+npm run check        # conflict markers, format, lint, typecheck, test, secrets, placeholders, attribution
 npm run test         # vitest
 npm run test:watch   # vitest watch mode
 npm run repo-settings   # dry-run / --apply / --verify GitHub repo settings
@@ -38,7 +38,7 @@ npm run verify-action-pins   # verify each pinned action SHA matches its # vX.Y.
 
 ## Git hooks
 
-On every commit, the pre-commit hook runs **lint-staged** (format + ESLint on staged files), then **typecheck**, the full **test** suite, and **secretlint**. That keeps local commits aligned with CI while the project is small.
+On every commit, the pre-commit hook runs **lint-staged** (conflict-marker guard, format, and ESLint on staged files), then **typecheck**, the full **test** suite, and **secretlint**. That keeps local commits aligned with CI while the project is small.
 
 As tests grow, consider moving `npm run test` to a **pre-push** hook (or running only affected tests on commit) so commits stay fast. CI should always run the full `npm run check`.
 
