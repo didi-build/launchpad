@@ -73,6 +73,22 @@ const templateDescription = "Example repository for bootstrap tests";
 
 const templateCases: PlanCase[] = [
   {
+    name: "didi-build push attempt 1 with invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA",
+    seed: "template",
+    env: {
+      GITHUB_REPOSITORY: "didi-build/my-repo",
+      GITHUB_REPOSITORY_OWNER: "didi-build",
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: templateDescription,
+      LAUNCHPAD_COLLECTS_PERSONAL_DATA: "maybe",
+    },
+    expectStatus: 1,
+    expectOutput: {},
+    stdoutIncludes: "Invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA",
+  },
+  {
     name: "didi-build push attempt 1 with token",
     seed: "template",
     env: {

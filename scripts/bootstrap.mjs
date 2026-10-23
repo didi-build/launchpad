@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
+import { validateCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
 import {
   deriveBootstrapPlan,
   deriveInitArgs,
@@ -13,6 +13,7 @@ import {
   resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   sanitizeToken,
+  shouldBootstrapRunNpmCiBeforeInit,
   shouldExecuteBootstrap,
 } from "./lib/bootstrap.mjs";
 
@@ -86,7 +87,6 @@ function runInitProject(args) {
   const result = spawnSync(process.execPath, [initProjectScript, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: process.env,
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -207,6 +207,13 @@ function planSummaryMarkdown(ctx, extras = {}) {
   return lines;
 }
 
+function failInvalidCollectsPersonalData(ctx, message) {
+  console.error(`::error title=Invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA::${message}`);
+  console.error(message);
+  appendStepSummary([...planSummaryMarkdown(ctx), "", `_${message}_`]);
+  process.exit(1);
+}
+
 function failMissingRepositoryDescription(ctx) {
   console.error(
     `::error title=Repository description required::${MISSING_REPOSITORY_DESCRIPTION_MESSAGE}`,
@@ -223,6 +230,13 @@ function failMissingRepositoryDescription(ctx) {
 function handlePlanMode() {
   const ctx = readPlanContext();
   const execute = shouldExecuteBootstrap(ctx);
+
+  const collectsValidation = validateCollectsPersonalDataEnv(
+    process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+  );
+  if (!collectsValidation.ok) {
+    failInvalidCollectsPersonalData(ctx, collectsValidation.message);
+  }
 
   if (ctx.plan.init && execute) {
     const resolved = resolveBootstrapRepositoryDescription(
@@ -306,10 +320,19 @@ function handleRunMode() {
   const summaryExtras = { ranInit: false, ranSettings: false, verifyOk: undefined };
 
   if (ctx.plan.init) {
-    const collectsPersonalData =
-      parseCollectsPersonalDataEnv(process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA) ??
-      true;
-    if (collectsPersonalData) {
+    const collectsValidation = validateCollectsPersonalDataEnv(
+      process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+    );
+    if (!collectsValidation.ok) {
+      failInvalidCollectsPersonalData(ctx, collectsValidation.message);
+    }
+
+    if (
+      shouldBootstrapRunNpmCiBeforeInit(
+        ctx.plan,
+        process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+      )
+    ) {
       const ci = runNpm(["ci"]);
       if (!ci.ok) {
         console.error(

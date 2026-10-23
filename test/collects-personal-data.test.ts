@@ -37,6 +37,26 @@ describe("collects-personal-data (unit)", () => {
     expect(() => parseInteractivePersonalDataAnswer("maybe")).toThrow();
   });
 
+  it("resolveCollectsPersonalData uses interactive ask when TTY and no flag/env", async () => {
+    await expect(
+      resolveCollectsPersonalData({
+        argv: ["slug", "Name"],
+        env: {},
+        isInteractive: true,
+        ask: async () => true,
+      }),
+    ).resolves.toEqual({ collects: true, argv: ["slug", "Name"] });
+
+    await expect(
+      resolveCollectsPersonalData({
+        argv: ["slug", "Name"],
+        env: {},
+        isInteractive: true,
+        ask: async () => false,
+      }),
+    ).resolves.toEqual({ collects: false, argv: ["slug", "Name"] });
+  });
+
   it("resolveCollectsPersonalData prefers flags, then env, then default false", async () => {
     await expect(
       resolveCollectsPersonalData({

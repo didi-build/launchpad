@@ -1,23 +1,25 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  formatNodriftMissingError,
+  NODRIFT_MANIFEST_REL,
+  resolveNodriftCli,
+} from "./lib/resolve-nodrift-cli.mjs";
 
-const manifestPath = join(".nodrift", "manifest.json");
+const manifestPath = join(NODRIFT_MANIFEST_REL);
 
 if (!existsSync(manifestPath)) {
   process.exit(0);
 }
 
-const nodriftBin = join(
-  process.cwd(),
-  "node_modules",
-  "@didi-build",
-  "nodrift",
-  "dist",
-  "cli.js",
-);
+const resolved = resolveNodriftCli(process.cwd());
+if (!resolved.ok) {
+  console.error(formatNodriftMissingError({ context: "check" }));
+  process.exit(1);
+}
 
-const result = spawnSync(process.execPath, [nodriftBin, "check"], {
+const result = spawnSync(process.execPath, [resolved.cliPath, "check"], {
   encoding: "utf8",
   stdio: ["ignore", "inherit", "inherit"],
 });

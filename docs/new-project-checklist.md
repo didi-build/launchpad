@@ -2,6 +2,8 @@
 
 GitHub template repos copy **files only**. Complete these steps after creating a repository from [Launchpad](https://github.com/didi-build/launchpad).
 
+**Prerequisites:** Node.js **`>=22.13.0`** (required for `@didi-build/nodrift check`, which uses `node:sqlite`).
+
 ## Bootstrap (automatic)
 
 - [ ] Confirm the **Bootstrap** workflow on `main` succeeded ([runbook](./runbooks/bootstrap.md))
@@ -12,7 +14,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 - [ ] Set the **repository description** when creating the repo from the template (Bootstrap uses it for `package.json` and docs; init fails if it is missing)
 - [ ] Mark the repo **private** (or public) per your org policy
-- [ ] If Bootstrap did not run (no token), run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`** — branch protection: **PR required**, status check **`check`**, **zero approvals**; creates Dependabot auto-merge label; enables **auto-merge**, **delete head branch on merge**, and **squash-only** merges
+- [ ] If Bootstrap did not run (no token), run **`npm run repo-settings`** (dry-run), then **`npm run repo-settings -- --apply`**. Branch protection: **PR required**, status check **`check`**, **zero approvals**; creates Dependabot auto-merge label; enables **auto-merge**, **delete head branch on merge**, and **squash-only** merges
 - [ ] If Bootstrap did not run, run **`npm run repo-settings -- --verify`** and fix anything reported
 - [ ] Add collaborators / teams and optional [CODEOWNERS](../.github/CODEOWNERS)
 
@@ -29,6 +31,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 - [ ] Search for `Launchpad` / `launchpad` leftovers in README and docs
 - [ ] Update [AGENTS.md](../AGENTS.md) project line if needed
 - [ ] Confirm `npm run check` passes (placeholders, attribution, nodrift when scaffolding is present, tests)
+- [ ] If you skipped personal data at init and need privacy scaffolding later: `npx nodrift init`, then `npm run check`
 
 ## Verify quality gates
 

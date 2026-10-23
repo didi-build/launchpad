@@ -17,7 +17,53 @@ const initScript = join(
   "scripts/init-project.mjs",
 );
 
+const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
+
 const LAUNCHPAD_MIT_SNAPSHOT = "MIT snapshot for attribution check\n";
+
+function initEnv(extra: Record<string, string | undefined> = {}) {
+  const env = { ...process.env };
+  delete env.LAUNCHPAD_COLLECTS_PERSONAL_DATA;
+  return { ...env, ...extra };
+}
+
+function runInit(
+  dir: string,
+  args: string[],
+  options: { env?: Record<string, string | undefined> } = {},
+) {
+  return execFileSync("node", [initScript, ...args], {
+    cwd: dir,
+    encoding: "utf8",
+    env: initEnv(options.env),
+  });
+}
+
+function runInitFails(
+  dir: string,
+  args: string[],
+  options: { env?: Record<string, string | undefined> } = {},
+) {
+  let status: number | undefined;
+  try {
+    execFileSync("node", [initScript, ...args], {
+      cwd: dir,
+      encoding: "utf8",
+      env: initEnv(options.env),
+    });
+  } catch (err) {
+    status = (err as { status?: number }).status;
+  }
+  expect(status).toBeGreaterThan(0);
+}
+
+function linkWorkspaceNodeModules(dir: string) {
+  symlinkSync(
+    join(workspaceRoot, "node_modules"),
+    join(dir, "node_modules"),
+    "junction",
+  );
+}
 
 function seedLaunchpadDir(root: string) {
   writeFileSync(
@@ -47,9 +93,7 @@ describe("init-project (unit)", () => {
   it("does not move templates when args are missing", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    expect(() =>
-      execFileSync("node", [initScript], { cwd: dir, encoding: "utf8" }),
-    ).toThrow();
+    runInitFails(dir, []);
     expect(existsSync(join(dir, "README.project.md"))).toBe(true);
     expect(existsSync(join(dir, "LICENSE.project"))).toBe(true);
     expect(existsSync(join(dir, "README.md"))).toBe(false);
@@ -65,19 +109,14 @@ describe("init-project (unit)", () => {
       join(dir, "package.json"),
       `${JSON.stringify({ launchpadTemplate: true }, null, 2)}\n`,
     );
-    expect(() =>
-      execFileSync("node", [initScript, "x", "X"], { cwd: dir, encoding: "utf8" }),
-    ).toThrow();
+    runInitFails(dir, ["x", "X"]);
     expect(existsSync(join(dir, "README.project.md"))).toBe(true);
   });
 
   it("moves README and LICENSE templates on success", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    execFileSync("node", [initScript, "my-app", "My App", "Purpose", "Acme Corp"], {
-      cwd: dir,
-      encoding: "utf8",
-    });
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp"]);
     expect(existsSync(join(dir, "README.project.md"))).toBe(false);
     expect(existsSync(join(dir, "LICENSE.project"))).toBe(false);
     const readme = readFileSync(join(dir, "README.md"), "utf8");
@@ -96,40 +135,79 @@ describe("init-project (unit)", () => {
     expect(readFileSync(join(dir, "LICENSES/launchpad-MIT.txt"), "utf8")).toBe(
       LAUNCHPAD_MIT_SNAPSHOT,
     );
+    expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
+    expect(existsSync(join(dir, "docs/privacy"))).toBe(false);
+  });
+
+  it("does not create nodrift scaffolding with --no-personal-data", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp", "--no-personal-data"]);
+    expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
+    expect(existsSync(join(dir, "docs/privacy/data-map.yml"))).toBe(false);
+  });
+
+  it("does not create nodrift scaffolding when env is false", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp"], {
+      env: { LAUNCHPAD_COLLECTS_PERSONAL_DATA: "false" },
+    });
+    expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
   });
 
   it("runs nodrift init when --personal-data is set", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
-    symlinkSync(
-      join(workspaceRoot, "node_modules"),
-      join(dir, "node_modules"),
-      "junction",
-    );
-    execFileSync(
-      "node",
-      [initScript, "my-app", "My App", "Purpose", "Acme Corp", "--personal-data"],
-      { cwd: dir, encoding: "utf8" },
-    );
+    linkWorkspaceNodeModules(dir);
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp", "--personal-data"]);
     expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(true);
     expect(existsSync(join(dir, "docs/privacy/data-map.yml"))).toBe(true);
+  });
+
+  it("runs nodrift init when env is true only", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp"], {
+      env: { LAUNCHPAD_COLLECTS_PERSONAL_DATA: "true" },
+    });
+    expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(true);
+  });
+
+  it("leaves templates when env is invalid", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    runInitFails(dir, ["my-app", "My App"], {
+      env: { LAUNCHPAD_COLLECTS_PERSONAL_DATA: "maybe" },
+    });
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "LICENSE.project"))).toBe(true);
+  });
+
+  it("leaves templates when personal-data flags conflict", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    runInitFails(dir, ["my-app", "My App", "--personal-data", "--no-personal-data"]);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+  });
+
+  it("preflights nodrift before writing when --personal-data and kit is missing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    runInitFails(dir, ["my-app", "My App", "--personal-data"]);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
   });
 
   it("does not clobber README on re-run", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    execFileSync("node", [initScript, "my-app", "My App"], {
-      cwd: dir,
-      encoding: "utf8",
-    });
+    runInit(dir, ["my-app", "My App"]);
     writeFileSync(join(dir, "README.md"), "# Custom README\n");
-    expect(() =>
-      execFileSync("node", [initScript, "my-app", "My App"], {
-        cwd: dir,
-        encoding: "utf8",
-      }),
-    ).toThrow();
+    runInitFails(dir, ["my-app", "My App"]);
     expect(readFileSync(join(dir, "README.md"), "utf8")).toBe("# Custom README\n");
   });
 });

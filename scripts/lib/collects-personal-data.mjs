@@ -73,6 +73,33 @@ export function parsePersonalDataFlags(argv) {
  * @param {string | undefined} raw
  * @returns {boolean | undefined}
  */
+/**
+ * @param {string | undefined} raw
+ * @returns {{ ok: true } | { ok: false; message: string }}
+ */
+export function validateCollectsPersonalDataEnv(raw) {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return { ok: true };
+  }
+  try {
+    parseCollectsPersonalDataEnv(raw);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, message };
+  }
+}
+
+/**
+ * Bootstrap default when the variable is unset: personal data collection enabled.
+ *
+ * @param {string | undefined} raw
+ * @returns {boolean}
+ */
+export function bootstrapCollectsPersonalData(raw) {
+  return parseCollectsPersonalDataEnv(raw) ?? true;
+}
+
 export function parseCollectsPersonalDataEnv(raw) {
   if (raw === undefined || raw === null) {
     return undefined;

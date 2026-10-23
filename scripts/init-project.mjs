@@ -9,13 +9,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import {
   parseInteractivePersonalDataAnswer,
   resolveCollectsPersonalData,
 } from "./lib/collects-personal-data.mjs";
+import {
+  formatNodriftMissingError,
+  resolveNodriftCli,
+} from "./lib/resolve-nodrift-cli.mjs";
 
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
@@ -77,6 +80,14 @@ if (!statSync(LICENSE_TEMPLATE, { throwIfNoEntry: false })?.isFile()) {
     `Missing ${LICENSE_TEMPLATE} (already initialized, or not a Launchpad checkout).`,
   );
   process.exit(1);
+}
+
+if (resolved.collects) {
+  const nodrift = resolveNodriftCli(process.cwd());
+  if (!nodrift.ok) {
+    console.error(formatNodriftMissingError({ context: "init" }));
+    process.exit(1);
+  }
 }
 
 const purpose =
@@ -148,36 +159,9 @@ writeFileSync("src/.gitkeep", "");
 renameSync(README_TEMPLATE, "README.md");
 renameSync(LICENSE_TEMPLATE, "LICENSE");
 
-function resolveNodriftCli() {
-  const candidates = [
-    join(process.cwd(), "node_modules", "@didi-build", "nodrift", "dist", "cli.js"),
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "node_modules",
-      "@didi-build",
-      "nodrift",
-      "dist",
-      "cli.js",
-    ),
-  ];
-  for (const candidate of candidates) {
-    if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
 if (resolved.collects) {
-  const nodriftBin = resolveNodriftCli();
-  if (!nodriftBin) {
-    console.error(
-      "Cannot run nodrift init: install dependencies first (npm ci), or add @didi-build/nodrift to devDependencies.",
-    );
-    process.exit(1);
-  }
-  const init = spawnSync(process.execPath, [nodriftBin, "init"], {
+  const nodrift = resolveNodriftCli(process.cwd());
+  const init = spawnSync(process.execPath, [nodrift.cliPath, "init"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -198,7 +182,7 @@ if (resolved.collects) {
   console.log("Privacy scaffolding: @didi-build/nodrift init completed.");
 } else {
   console.log(
-    "Privacy scaffolding: skipped (no personal data). Re-run with --personal-data or LAUNCHPAD_COLLECTS_PERSONAL_DATA=true to add it later.",
+    "Privacy scaffolding: skipped (no personal data). To add it later: npx nodrift init, then npm run check.",
   );
 }
 console.log("Next: npm install && npm run check");

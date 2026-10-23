@@ -10,7 +10,7 @@ On eligible runs, Bootstrap:
 2. Commits the result to the default branch as `github-actions[bot]` (including removing Launchpad example code and setting `package.json` `description` from the repo purpose).
 3. Runs `npm run repo-settings -- --apply` then `-- --verify` using the bootstrap token (branch protection, auto-merge, delete head branches, squash-only merges).
 
-The workflow runs **`npm ci` only when init will run nodrift** (personal data collection enabled). It does not install dependencies for settings-only runs. The PAT is stored in `.git/config` by `actions/checkout`; keep `BOOTSTRAP_TOKEN` scoped and rotate it on schedule.
+**Token job commands:** After the read-only plan step, steps that use `BOOTSTRAP_TOKEN` may run `init-project`, `npm ci` (when nodrift init is enabled), `repo-settings`, and git push. Only run install and lifecycle commands that the accepted [ADR 0003](../decisions/0003-nodrift-in-launchpad.md) allows; hardening of `npm ci` under the PAT is tracked there pending CTO review. Settings-only runs do not install dependencies. Keep `BOOTSTRAP_TOKEN` scoped and rotate it on schedule.
 
 ## Plan table
 
