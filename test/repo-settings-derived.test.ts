@@ -24,7 +24,7 @@ describe("repo-settings on derived project (unit)", () => {
       join(dir, "package.json"),
       `${JSON.stringify({ name: "launchpad", launchpadTemplate: true }, null, 2)}\n`,
     );
-    execFileSync("node", [initScript, "demo", "Demo App"], {
+    execFileSync("node", [initScript, "demo", "Demo App", "--no-personal-data"], {
       cwd: dir,
       encoding: "utf8",
     });

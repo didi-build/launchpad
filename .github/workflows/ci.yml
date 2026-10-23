@@ -28,32 +28,49 @@ jobs:
       - name: init-project smoke test in a clean copy
         run: |
           set -euo pipefail
-          tmp=$(mktemp -d)
-          cp -a . "$tmp/lp"
-          cd "$tmp/lp"
-          rm -rf node_modules .git
-          npm ci
-          npm run init-project -- smoke-test "Smoke Test" "CI template smoke"
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            if (pkg.description !== 'CI template smoke') {
-              console.error('package.json description mismatch:', pkg.description);
-              process.exit(1);
-            }
-            for (const f of ['src/greet.ts', 'test/greet.test.ts']) {
-              if (fs.existsSync(f)) {
-                console.error('example file still present:', f);
+          repo_root="$PWD"
+          smoke_init_copy() {
+            local personal_data_flag="$1"
+            local expect_nodrift="$2"
+            local tmp
+            tmp=$(mktemp -d)
+            cp -a "$repo_root" "$tmp/lp"
+            cd "$tmp/lp"
+            rm -rf node_modules .git
+            npm ci
+            npm run init-project -- smoke-test "Smoke Test" "CI template smoke" "$personal_data_flag"
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+              if (pkg.description !== 'CI template smoke') {
+                console.error('package.json description mismatch:', pkg.description);
                 process.exit(1);
               }
-            }
-            if (!fs.existsSync('src/.gitkeep')) {
-              console.error('missing src/.gitkeep');
-              process.exit(1);
-            }
-          "
-          npm ci
-          npm run check
+              for (const f of ['src/greet.ts', 'test/greet.test.ts']) {
+                if (fs.existsSync(f)) {
+                  console.error('example file still present:', f);
+                  process.exit(1);
+                }
+              }
+              if (!fs.existsSync('src/.gitkeep')) {
+                console.error('missing src/.gitkeep');
+                process.exit(1);
+              }
+              const hasNodrift = fs.existsSync('.nodrift/manifest.json');
+              if (process.argv[1] === 'yes' && !hasNodrift) {
+                console.error('expected nodrift manifest after --personal-data');
+                process.exit(1);
+              }
+              if (process.argv[1] === 'no' && hasNodrift) {
+                console.error('unexpected nodrift manifest after --no-personal-data');
+                process.exit(1);
+              }
+            " "$expect_nodrift"
+            npm ci
+            npm run check
+          }
+          smoke_init_copy --no-personal-data no
+          smoke_init_copy --personal-data yes
 
   verify-action-pins:
     name: verify-action-pins

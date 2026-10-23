@@ -3,6 +3,13 @@ import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  BOOTSTRAP_NPM_CI_ARGS,
+  gitPushArgs,
+  gitPushAuthProcessEnv,
+} from "./lib/bootstrap-install.mjs";
+import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
+import { validateCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
+import {
   deriveBootstrapPlan,
   deriveInitArgs,
   isInitialized,
@@ -12,6 +19,7 @@ import {
   resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   sanitizeToken,
+  shouldBootstrapRunNpmCiBeforeInit,
   shouldExecuteBootstrap,
 } from "./lib/bootstrap.mjs";
 
@@ -82,9 +90,11 @@ function appendStepSummary(lines) {
 }
 
 function runInitProject(args) {
+  const childEnv = envWithoutBootstrapTokens(process.env);
   const result = spawnSync(process.execPath, [initProjectScript, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: childEnv,
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -99,7 +109,7 @@ function runNpm(args, extraEnv = {}) {
   const result = spawnSync("npm", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, ...extraEnv },
+    env: { ...envWithoutBootstrapTokens(process.env), ...extraEnv },
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -153,10 +163,11 @@ function resolveSanitizedGhToken(ctx) {
   return { ghToken: token };
 }
 
-function runGit(args) {
+function runGit(args, extraEnv = {}) {
   const result = spawnSync("git", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: { ...envWithoutBootstrapTokens(process.env), ...extraEnv },
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -165,6 +176,10 @@ function runGit(args) {
     process.stderr.write(result.stderr);
   }
   return result;
+}
+
+function runGitPushWithToken(token, repository) {
+  return runGit(gitPushArgs(repository), gitPushAuthProcessEnv(token));
 }
 
 function planSummaryMarkdown(ctx, extras = {}) {
@@ -205,6 +220,13 @@ function planSummaryMarkdown(ctx, extras = {}) {
   return lines;
 }
 
+function failInvalidCollectsPersonalData(ctx, message) {
+  console.error(`::error title=Invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA::${message}`);
+  console.error(message);
+  appendStepSummary([...planSummaryMarkdown(ctx), "", `_${message}_`]);
+  process.exit(1);
+}
+
 function failMissingRepositoryDescription(ctx) {
   console.error(
     `::error title=Repository description required::${MISSING_REPOSITORY_DESCRIPTION_MESSAGE}`,
@@ -221,6 +243,13 @@ function failMissingRepositoryDescription(ctx) {
 function handlePlanMode() {
   const ctx = readPlanContext();
   const execute = shouldExecuteBootstrap(ctx);
+
+  const collectsValidation = validateCollectsPersonalDataEnv(
+    process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+  );
+  if (!collectsValidation.ok) {
+    failInvalidCollectsPersonalData(ctx, collectsValidation.message);
+  }
 
   if (ctx.plan.init && execute) {
     const resolved = resolveBootstrapRepositoryDescription(
@@ -276,8 +305,12 @@ function handleRunMode() {
   }
 
   const tokenResolution = resolveSanitizedGhToken(ctx);
+  const pushTokenRaw = process.env.BOOTSTRAP_TOKEN ?? process.env.GH_TOKEN ?? "";
+  const pushTokenSanitized = sanitizeToken(pushTokenRaw);
 
   const { owner: repoOwnerLogin, name: repoName } = repositoryParts();
+  const repositoryFull =
+    process.env.GITHUB_REPOSITORY ?? `${repoOwnerLogin}/${repoName}`;
   const description = process.env.LAUNCHPAD_REPO_DESCRIPTION ?? "";
   const repositoryOwnerLogin =
     process.env.GITHUB_REPOSITORY_OWNER?.trim() || repoOwnerLogin;
@@ -304,6 +337,28 @@ function handleRunMode() {
   const summaryExtras = { ranInit: false, ranSettings: false, verifyOk: undefined };
 
   if (ctx.plan.init) {
+    const collectsValidation = validateCollectsPersonalDataEnv(
+      process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+    );
+    if (!collectsValidation.ok) {
+      failInvalidCollectsPersonalData(ctx, collectsValidation.message);
+    }
+
+    if (
+      shouldBootstrapRunNpmCiBeforeInit(
+        ctx.plan,
+        process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
+      )
+    ) {
+      const ci = runNpm(BOOTSTRAP_NPM_CI_ARGS);
+      if (!ci.ok) {
+        console.error(
+          "npm ci --ignore-scripts failed before init-project (required for @didi-build/nodrift init).",
+        );
+        process.exit(1);
+      }
+    }
+
     const ok = runInitProject([
       initArgs.slug,
       initArgs.displayName,
@@ -325,16 +380,19 @@ function handleRunMode() {
     runGit(["add", "-A"]);
     const diff = runGit(["diff", "--cached", "--quiet"]);
     if (diff.status !== 0) {
-      const commit = runGit([
-        "commit",
-        "-m",
-        "chore: initialize project from Launchpad template",
-      ]);
+      const commit = runGit(
+        ["commit", "-m", "chore: initialize project from Launchpad template"],
+        { HUSKY: "0" },
+      );
       if (commit.status !== 0) {
         console.error("git commit failed.");
         process.exit(1);
       }
-      const push = runGit(["push", "origin", "HEAD"]);
+      if (!pushTokenSanitized.valid) {
+        console.error("BOOTSTRAP_TOKEN is required to push the init commit.");
+        process.exit(1);
+      }
+      const push = runGitPushWithToken(pushTokenSanitized.token, repositoryFull);
       if (push.status !== 0) {
         console.error("git push failed.");
         process.exit(1);

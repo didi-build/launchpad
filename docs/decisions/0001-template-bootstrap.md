@@ -34,3 +34,7 @@ The workflow reads the repo with the default `GITHUB_TOKEN`, computes the plan, 
 - `didi-build` derived repos require `BOOTSTRAP_TOKEN` on the org or bootstrap fails loudly.
 - Other orgs/users must add their own repo secret or follow the manual checklist.
 - `BOOTSTRAP_TOKEN` must not be referenced outside `bootstrap.yml` (enforced by `npm run secret-usage`).
+
+## Amendment (2026-10-23): nodrift and Bootstrap env
+
+See [0003. Nodrift guardrails kit in Launchpad](./0003-nodrift-in-launchpad.md) for `@didi-build/nodrift`, `LAUNCHPAD_COLLECTS_PERSONAL_DATA`, and when `npm run nodrift` runs in derived repos. Bootstrap still separates the read-only plan from token checkout; invalid personal-data env values fail in plan before the PAT is used.

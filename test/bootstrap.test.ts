@@ -21,6 +21,7 @@ import {
   resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   sanitizeToken,
+  shouldBootstrapRunNpmCiBeforeInit,
   shouldExecuteBootstrap,
 } from "../scripts/lib/bootstrap.mjs";
 
@@ -201,6 +202,13 @@ describe("bootstrap lib (unit)", () => {
     });
   });
 
+  it("shouldBootstrapRunNpmCiBeforeInit follows personal data env", () => {
+    const initPlan = { init: true, settings: true };
+    expect(shouldBootstrapRunNpmCiBeforeInit(initPlan, "false")).toBe(false);
+    expect(shouldBootstrapRunNpmCiBeforeInit(initPlan, undefined)).toBe(true);
+    expect(shouldBootstrapRunNpmCiBeforeInit({ init: false }, "true")).toBe(false);
+  });
+
   it("shouldExecuteBootstrap respects token policy", () => {
     const plan = { init: true, settings: true };
     expect(shouldExecuteBootstrap({ plan, tokenPolicy: "ok" })).toBe(true);
@@ -228,10 +236,17 @@ describe("init-project shell-safe purpose (unit)", () => {
     const dir = mkdtempSync(join(tmpdir(), "bootstrap-shell-"));
     seedLaunchpadDir(dir);
     const purpose = 'Say "hi" `bye` $(rm -rf /)\nsecond line';
-    execFileSync("node", [initScript, "safe-app", "Safe App", purpose, "Owner"], {
-      cwd: dir,
-      encoding: "utf8",
-    });
+    const env = { ...process.env };
+    delete env.LAUNCHPAD_COLLECTS_PERSONAL_DATA;
+    execFileSync(
+      "node",
+      [initScript, "safe-app", "Safe App", purpose, "Owner", "--no-personal-data"],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        env,
+      },
+    );
     const readme = readFileSync(join(dir, "README.md"), "utf8");
     expect(readme).toContain(purpose);
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));

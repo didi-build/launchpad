@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { bootstrapCollectsPersonalData } from "./collects-personal-data.mjs";
 
 const DEFAULT_PURPOSE =
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
@@ -199,7 +200,7 @@ export function resolveTokenPolicy({
 export const MANUAL_BOOTSTRAP_FALLBACK = [
   "Bootstrap skipped: no BOOTSTRAP_TOKEN repository secret.",
   "Manual fallback:",
-  '  npm run init-project -- <slug> "<display name>" ["<purpose>"]',
+  '  npm run init-project -- <slug> "<display name>" ["<purpose>"] [--personal-data | --no-personal-data]',
   "  npm run repo-settings -- --apply",
   "  npm run repo-settings -- --verify",
 ].join("\n");
@@ -213,4 +214,16 @@ export function shouldExecuteBootstrap({ plan, tokenPolicy }) {
     return false;
   }
   return plan.init || plan.settings;
+}
+
+/**
+ * @param {{ init: boolean }} plan
+ * @param {string | undefined} collectsPersonalDataEnv
+ * @returns {boolean}
+ */
+export function shouldBootstrapRunNpmCiBeforeInit(plan, collectsPersonalDataEnv) {
+  if (!plan.init) {
+    return false;
+  }
+  return bootstrapCollectsPersonalData(collectsPersonalDataEnv);
 }

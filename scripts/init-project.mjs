@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   readFileSync,
@@ -7,12 +8,25 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
+import { stdin as input, stdout as output } from "node:process";
+import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
+import {
+  parseInteractivePersonalDataAnswer,
+  parsePersonalDataFlags,
+  resolveCollectsPersonalData,
+} from "./lib/collects-personal-data.mjs";
+import {
+  formatNodriftMissingError,
+  resolveNodriftCli,
+} from "./lib/resolve-nodrift-cli.mjs";
 
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
 
-const positional = process.argv.slice(2);
+const rawArgv = process.argv.slice(2);
+const { positional } = parsePersonalDataFlags(rawArgv);
 const slug = positional[0];
 const displayName = positional[1];
 const purposeArg = positional[2];
@@ -20,7 +34,10 @@ const ownerArg = positional[3];
 
 if (!slug || !displayName) {
   console.error(
-    'Usage: npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"]',
+    'Usage: npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"] [--personal-data | --no-personal-data]',
+  );
+  console.error(
+    "Non-interactive: set LAUNCHPAD_COLLECTS_PERSONAL_DATA=true|false or pass a personal-data flag.",
   );
   process.exit(1);
 }
@@ -42,6 +59,38 @@ if (!statSync(LICENSE_TEMPLATE, { throwIfNoEntry: false })?.isFile()) {
     `Missing ${LICENSE_TEMPLATE} (already initialized, or not a Launchpad checkout).`,
   );
   process.exit(1);
+}
+
+async function askCollectsPersonalData() {
+  const rl = createInterface({ input, output });
+  try {
+    const answer = await rl.question("Will this project collect personal data? (Y/n) ");
+    return parseInteractivePersonalDataAnswer(answer);
+  } finally {
+    rl.close();
+  }
+}
+
+let resolved;
+try {
+  resolved = await resolveCollectsPersonalData({
+    argv: rawArgv,
+    env: process.env,
+    isInteractive: Boolean(process.stdin.isTTY),
+    ask: askCollectsPersonalData,
+  });
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(message);
+  process.exit(1);
+}
+
+if (resolved.collects) {
+  const nodrift = resolveNodriftCli(process.cwd());
+  if (!nodrift.ok) {
+    console.error(formatNodriftMissingError({ context: "init" }));
+    process.exit(1);
+  }
 }
 
 const purpose =
@@ -113,5 +162,31 @@ writeFileSync("src/.gitkeep", "");
 renameSync(README_TEMPLATE, "README.md");
 renameSync(LICENSE_TEMPLATE, "LICENSE");
 
+if (resolved.collects) {
+  const nodrift = resolveNodriftCli(process.cwd());
+  const init = spawnSync(process.execPath, [nodrift.cliPath, "init"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: envWithoutBootstrapTokens(process.env),
+  });
+  if (init.stdout) {
+    process.stdout.write(init.stdout);
+  }
+  if (init.stderr) {
+    process.stderr.write(init.stderr);
+  }
+  if (init.status !== 0) {
+    console.error("nodrift init failed.");
+    process.exit(init.status ?? 1);
+  }
+}
+
 console.log(`Initialized project "${displayName}" (${slug}).`);
+if (resolved.collects) {
+  console.log("Privacy scaffolding: @didi-build/nodrift init completed.");
+} else {
+  console.log(
+    "Privacy scaffolding: skipped (no personal data). To add it later: npx nodrift init, then npm run check.",
+  );
+}
 console.log("Next: npm install && npm run check");
