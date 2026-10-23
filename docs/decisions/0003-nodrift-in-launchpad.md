@@ -20,7 +20,7 @@ Bootstrap runs `init-project` in a job that checks out with `BOOTSTRAP_TOKEN`. W
 - `git push` passes basic x-access-token auth only via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_0` / `GIT_CONFIG_VALUE_0` on that process; the token is not in argv, the remote URL, or on disk.
 - `repo-settings` receives `GH_TOKEN` only for those subprocess calls.
 
-This is the documented exception to the bootstrap runbook rule that forbids unrestricted `npm ci` and lifecycle scripts in the token job.
+This is the documented exception to the bootstrap runbook table row that forbids unrestricted `npm ci` and lifecycle scripts in the token job.
 
 ### 2. Personal data defaults (opt-out)
 
@@ -53,4 +53,4 @@ This is the documented exception to the bootstrap runbook rule that forbids unre
 
 - Derived repos need Node `>=22.13.0` when nodrift check runs.
 - Opt-out repos set `LAUNCHPAD_COLLECTS_PERSONAL_DATA=false` or `--no-personal-data`; they can add scaffolding later with `npx nodrift init`.
-- Bootstrap runbook keeps the historical no unrestricted-`npm-ci` rule; nodrift uses `npm ci --ignore-scripts` without token in the child env, as in section 1.
+- Bootstrap runbook token-job table keeps the historical no unrestricted-`npm-ci` rule; nodrift uses `npm ci --ignore-scripts` without token in the child env, as in section 1.

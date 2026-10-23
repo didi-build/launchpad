@@ -22,7 +22,7 @@ After the read-only plan step, eligible runs use a second checkout with `persist
 | Push init commit                             | `git push` with `GIT_CONFIG_*` auth  | Basic x-access-token via `GIT_CONFIG_*` on this process only | N/A                     |
 | Settings                                     | `repo-settings --apply` / `--verify` | `GH_TOKEN` only for these subprocesses                       | N/A                     |
 
-`init-project` and `npm ci --ignore-scripts` use `--ignore-scripts` and no bootstrap token in the child env. Push passes auth only through `GIT_CONFIG_*` on the push process; `repo-settings` receives `GH_TOKEN` only. See [ADR 0003 section 1](../decisions/0003-nodrift-in-launchpad.md#1-bootstrap-install-and-token-use).
+`npm ci --ignore-scripts` runs with `--ignore-scripts` and no bootstrap token in the child env; `init-project` runs with no bootstrap token in the child env. Push passes auth only through `GIT_CONFIG_*` on the push process; `repo-settings` receives `GH_TOKEN` only. See [ADR 0003 section 1](../decisions/0003-nodrift-in-launchpad.md#1-bootstrap-install-and-token-use).
 
 ## Plan table
 
