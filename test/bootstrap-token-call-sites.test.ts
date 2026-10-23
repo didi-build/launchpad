@@ -126,8 +126,12 @@ function seedBootstrapInitFixture(dir: string) {
     "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n",
   );
   writeFileSync(join(dir, "LICENSE.project"), "Copyright {{PROJECT_OWNER}}\n");
-  copyFileSync(join(repoRoot, "package.json"), join(dir, "package.json"));
   copyFileSync(join(repoRoot, "package-lock.json"), join(dir, "package-lock.json"));
+  const pkg = JSON.parse(
+    readFileSync(join(repoRoot, "package.json"), "utf8"),
+  ) as Record<string, unknown>;
+  pkg.launchpadTemplate = true;
+  writeFileSync(join(dir, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
   mkdirSync(join(dir, "docs"), { recursive: true });
   if (!existsSync(join(dir, "node_modules"))) {
     symlinkSync(join(repoRoot, "node_modules"), join(dir, "node_modules"));
