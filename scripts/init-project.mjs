@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import {
   parseInteractivePersonalDataAnswer,
+  parsePersonalDataFlags,
   resolveCollectsPersonalData,
 } from "./lib/collects-personal-data.mjs";
 import {
@@ -23,31 +24,8 @@ import {
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
 
-async function askCollectsPersonalData() {
-  const rl = createInterface({ input, output });
-  try {
-    const answer = await rl.question("Will this project collect personal data? (y/N) ");
-    return parseInteractivePersonalDataAnswer(answer);
-  } finally {
-    rl.close();
-  }
-}
-
-let resolved;
-try {
-  resolved = await resolveCollectsPersonalData({
-    argv: process.argv.slice(2),
-    env: process.env,
-    isInteractive: Boolean(process.stdin.isTTY),
-    ask: askCollectsPersonalData,
-  });
-} catch (err) {
-  const message = err instanceof Error ? err.message : String(err);
-  console.error(message);
-  process.exit(1);
-}
-
-const positional = resolved.argv;
+const rawArgv = process.argv.slice(2);
+const { positional } = parsePersonalDataFlags(rawArgv);
 const slug = positional[0];
 const displayName = positional[1];
 const purposeArg = positional[2];
@@ -79,6 +57,30 @@ if (!statSync(LICENSE_TEMPLATE, { throwIfNoEntry: false })?.isFile()) {
   console.error(
     `Missing ${LICENSE_TEMPLATE} (already initialized, or not a Launchpad checkout).`,
   );
+  process.exit(1);
+}
+
+async function askCollectsPersonalData() {
+  const rl = createInterface({ input, output });
+  try {
+    const answer = await rl.question("Will this project collect personal data? (Y/n) ");
+    return parseInteractivePersonalDataAnswer(answer);
+  } finally {
+    rl.close();
+  }
+}
+
+let resolved;
+try {
+  resolved = await resolveCollectsPersonalData({
+    argv: rawArgv,
+    env: process.env,
+    isInteractive: Boolean(process.stdin.isTTY),
+    ask: askCollectsPersonalData,
+  });
+} catch (err) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(message);
   process.exit(1);
 }
 

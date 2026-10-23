@@ -1,15 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   formatNodriftMissingError,
-  NODRIFT_MANIFEST_REL,
   resolveNodriftCli,
+  shouldRunNodriftCheck,
 } from "./lib/resolve-nodrift-cli.mjs";
 
-const manifestPath = join(NODRIFT_MANIFEST_REL);
-
-if (!existsSync(manifestPath)) {
+if (!shouldRunNodriftCheck(process.cwd())) {
+  console.log("nodrift check skipped (no privacy scaffolding present)");
   process.exit(0);
 }
 

@@ -3,6 +3,18 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const NODRIFT_MANIFEST_REL = ".nodrift/manifest.json";
+export const NODRIFT_DATA_MAP_REL = "docs/privacy/data-map.yml";
+
+/**
+ * @param {string} [cwd]
+ * @returns {boolean}
+ */
+export function shouldRunNodriftCheck(cwd = process.cwd()) {
+  return (
+    existsSync(join(cwd, NODRIFT_MANIFEST_REL)) ||
+    existsSync(join(cwd, NODRIFT_DATA_MAP_REL))
+  );
+}
 
 /**
  * @param {string} [cwd]
@@ -39,5 +51,5 @@ export function formatNodriftMissingError({ context }) {
   if (context === "init") {
     return "Cannot run nodrift init: install dependencies first (npm ci), and ensure @didi-build/nodrift is listed in devDependencies.";
   }
-  return "nodrift scaffolding is present (.nodrift/manifest.json) but @didi-build/nodrift is not installed. Run npm ci, then npm run check.";
+  return "Privacy scaffolding is present but @didi-build/nodrift is not installed. Run npm ci, then npm run check.";
 }

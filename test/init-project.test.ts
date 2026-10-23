@@ -116,7 +116,7 @@ describe("init-project (unit)", () => {
   it("moves README and LICENSE templates on success", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp"]);
+    runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp", "--no-personal-data"]);
     expect(existsSync(join(dir, "README.project.md"))).toBe(false);
     expect(existsSync(join(dir, "LICENSE.project"))).toBe(false);
     const readme = readFileSync(join(dir, "README.md"), "utf8");
@@ -202,10 +202,30 @@ describe("init-project (unit)", () => {
     expect(existsSync(join(dir, "README.md"))).toBe(false);
   });
 
+  it("fails non-interactively without personal data answer before writes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    let stderr = "";
+    try {
+      execFileSync("node", [initScript, "my-app", "My App"], {
+        cwd: dir,
+        encoding: "utf8",
+        env: initEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      const e = err as { stderr?: string };
+      stderr = e.stderr ?? "";
+    }
+    expect(stderr).toContain("--personal-data");
+    expect(stderr).toContain("LAUNCHPAD_COLLECTS_PERSONAL_DATA");
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+  });
+
   it("does not clobber README on re-run", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
-    runInit(dir, ["my-app", "My App"]);
+    runInit(dir, ["my-app", "My App", "--no-personal-data"]);
     writeFileSync(join(dir, "README.md"), "# Custom README\n");
     runInitFails(dir, ["my-app", "My App"]);
     expect(readFileSync(join(dir, "README.md"), "utf8")).toBe("# Custom README\n");

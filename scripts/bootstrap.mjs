@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
 import { validateCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
 import {
   deriveBootstrapPlan,
@@ -84,9 +85,11 @@ function appendStepSummary(lines) {
 }
 
 function runInitProject(args) {
+  const childEnv = envWithoutBootstrapTokens(process.env);
   const result = spawnSync(process.execPath, [initProjectScript, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: childEnv,
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -97,11 +100,12 @@ function runInitProject(args) {
   return result.status === 0;
 }
 
-function runNpm(args, extraEnv = {}) {
+function runNpm(args, extraEnv = {}, { stripTokens = false } = {}) {
+  const base = stripTokens ? envWithoutBootstrapTokens(process.env) : process.env;
   const result = spawnSync("npm", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, ...extraEnv },
+    env: { ...base, ...extraEnv },
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -155,10 +159,11 @@ function resolveSanitizedGhToken(ctx) {
   return { ghToken: token };
 }
 
-function runGit(args) {
+function runGit(args, extraEnv = {}) {
   const result = spawnSync("git", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: { ...envWithoutBootstrapTokens(process.env), ...extraEnv },
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -167,6 +172,12 @@ function runGit(args) {
     process.stderr.write(result.stderr);
   }
   return result;
+}
+
+function runGitPushWithToken(token, repository) {
+  const encoded = encodeURIComponent(token);
+  const pushUrl = `https://x-access-token:${encoded}@github.com/${repository}.git`;
+  return runGit(["push", pushUrl, "HEAD"]);
 }
 
 function planSummaryMarkdown(ctx, extras = {}) {
@@ -292,8 +303,12 @@ function handleRunMode() {
   }
 
   const tokenResolution = resolveSanitizedGhToken(ctx);
+  const pushTokenRaw = process.env.BOOTSTRAP_TOKEN ?? process.env.GH_TOKEN ?? "";
+  const pushTokenSanitized = sanitizeToken(pushTokenRaw);
 
   const { owner: repoOwnerLogin, name: repoName } = repositoryParts();
+  const repositoryFull =
+    process.env.GITHUB_REPOSITORY ?? `${repoOwnerLogin}/${repoName}`;
   const description = process.env.LAUNCHPAD_REPO_DESCRIPTION ?? "";
   const repositoryOwnerLogin =
     process.env.GITHUB_REPOSITORY_OWNER?.trim() || repoOwnerLogin;
@@ -333,10 +348,10 @@ function handleRunMode() {
         process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
       )
     ) {
-      const ci = runNpm(["ci"]);
+      const ci = runNpm(["ci", "--ignore-scripts"], {}, { stripTokens: true });
       if (!ci.ok) {
         console.error(
-          "npm ci failed before init-project (required for @didi-build/nodrift init).",
+          "npm ci --ignore-scripts failed before init-project (required for @didi-build/nodrift init).",
         );
         process.exit(1);
       }
@@ -363,16 +378,19 @@ function handleRunMode() {
     runGit(["add", "-A"]);
     const diff = runGit(["diff", "--cached", "--quiet"]);
     if (diff.status !== 0) {
-      const commit = runGit([
-        "commit",
-        "-m",
-        "chore: initialize project from Launchpad template",
-      ]);
+      const commit = runGit(
+        ["commit", "-m", "chore: initialize project from Launchpad template"],
+        { HUSKY: "0" },
+      );
       if (commit.status !== 0) {
         console.error("git commit failed.");
         process.exit(1);
       }
-      const push = runGit(["push", "origin", "HEAD"]);
+      if (!pushTokenSanitized.valid) {
+        console.error("BOOTSTRAP_TOKEN is required to push the init commit.");
+        process.exit(1);
+      }
+      const push = runGitPushWithToken(pushTokenSanitized.token, repositoryFull);
       if (push.status !== 0) {
         console.error("git push failed.");
         process.exit(1);

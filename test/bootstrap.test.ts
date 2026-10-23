@@ -238,11 +238,15 @@ describe("init-project shell-safe purpose (unit)", () => {
     const purpose = 'Say "hi" `bye` $(rm -rf /)\nsecond line';
     const env = { ...process.env };
     delete env.LAUNCHPAD_COLLECTS_PERSONAL_DATA;
-    execFileSync("node", [initScript, "safe-app", "Safe App", purpose, "Owner"], {
-      cwd: dir,
-      encoding: "utf8",
-      env,
-    });
+    execFileSync(
+      "node",
+      [initScript, "safe-app", "Safe App", purpose, "Owner", "--no-personal-data"],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        env,
+      },
+    );
     const readme = readFileSync(join(dir, "README.md"), "utf8");
     expect(readme).toContain(purpose);
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));

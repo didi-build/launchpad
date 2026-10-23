@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  NON_INTERACTIVE_COLLECTS_PERSONAL_DATA_MESSAGE,
   parseCollectsPersonalDataEnv,
   parseInteractivePersonalDataAnswer,
   parsePersonalDataFlags,
@@ -30,10 +31,10 @@ describe("collects-personal-data (unit)", () => {
     expect(() => parseCollectsPersonalDataEnv("maybe")).toThrow(/Invalid LAUNCHPAD/);
   });
 
-  it("parses interactive answers with default no", () => {
-    expect(parseInteractivePersonalDataAnswer("")).toBe(false);
-    expect(parseInteractivePersonalDataAnswer("n")).toBe(false);
+  it("parses interactive answers with default yes", () => {
+    expect(parseInteractivePersonalDataAnswer("")).toBe(true);
     expect(parseInteractivePersonalDataAnswer("y")).toBe(true);
+    expect(parseInteractivePersonalDataAnswer("n")).toBe(false);
     expect(() => parseInteractivePersonalDataAnswer("maybe")).toThrow();
   });
 
@@ -57,7 +58,17 @@ describe("collects-personal-data (unit)", () => {
     ).resolves.toEqual({ collects: false, argv: ["slug", "Name"] });
   });
 
-  it("resolveCollectsPersonalData prefers flags, then env, then default false", async () => {
+  it("resolveCollectsPersonalData rejects non-interactive use without flag or env", async () => {
+    await expect(
+      resolveCollectsPersonalData({
+        argv: ["slug", "Name"],
+        env: {},
+        isInteractive: false,
+      }),
+    ).rejects.toThrow(NON_INTERACTIVE_COLLECTS_PERSONAL_DATA_MESSAGE);
+  });
+
+  it("resolveCollectsPersonalData prefers flags, then env", async () => {
     await expect(
       resolveCollectsPersonalData({
         argv: ["slug", "Name", "--no-personal-data"],
@@ -71,12 +82,5 @@ describe("collects-personal-data (unit)", () => {
         env: { LAUNCHPAD_COLLECTS_PERSONAL_DATA: "true" },
       }),
     ).resolves.toEqual({ collects: true, argv: ["slug", "Name"] });
-
-    await expect(
-      resolveCollectsPersonalData({
-        argv: ["slug", "Name"],
-        env: {},
-      }),
-    ).resolves.toEqual({ collects: false, argv: ["slug", "Name"] });
   });
 });

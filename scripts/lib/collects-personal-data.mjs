@@ -1,3 +1,6 @@
+export const NON_INTERACTIVE_COLLECTS_PERSONAL_DATA_MESSAGE =
+  "Personal data collection must be specified non-interactively: use --personal-data or --no-personal-data, or set LAUNCHPAD_COLLECTS_PERSONAL_DATA.";
+
 /**
  * Resolve whether init-project should run @didi-build/nodrift init.
  *
@@ -33,7 +36,7 @@ export async function resolveCollectsPersonalData({
     return { collects, argv: positional };
   }
 
-  return { collects: false, argv: positional };
+  throw new Error(NON_INTERACTIVE_COLLECTS_PERSONAL_DATA_MESSAGE);
 }
 
 /**
@@ -71,10 +74,6 @@ export function parsePersonalDataFlags(argv) {
 
 /**
  * @param {string | undefined} raw
- * @returns {boolean | undefined}
- */
-/**
- * @param {string | undefined} raw
  * @returns {{ ok: true } | { ok: false; message: string }}
  */
 export function validateCollectsPersonalDataEnv(raw) {
@@ -100,6 +99,10 @@ export function bootstrapCollectsPersonalData(raw) {
   return parseCollectsPersonalDataEnv(raw) ?? true;
 }
 
+/**
+ * @param {string | undefined} raw
+ * @returns {boolean | undefined}
+ */
 export function parseCollectsPersonalDataEnv(raw) {
   if (raw === undefined || raw === null) {
     return undefined;
@@ -125,11 +128,11 @@ export function parseCollectsPersonalDataEnv(raw) {
  */
 export function parseInteractivePersonalDataAnswer(answer) {
   const value = String(answer).trim().toLowerCase();
-  if (value === "" || value === "n" || value === "no") {
-    return false;
-  }
-  if (value === "y" || value === "yes") {
+  if (value === "" || value === "y" || value === "yes") {
     return true;
   }
-  throw new Error('Answer with "y" or "n" (default is no).');
+  if (value === "n" || value === "no") {
+    return false;
+  }
+  throw new Error('Answer with "y" or "n" (default is yes).');
 }

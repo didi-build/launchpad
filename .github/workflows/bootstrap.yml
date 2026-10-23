@@ -39,6 +39,7 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.BOOTSTRAP_TOKEN }}
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: steps.plan.outputs.execute == 'true'
@@ -52,5 +53,5 @@ jobs:
           HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
           LAUNCHPAD_REPO_DESCRIPTION: ${{ github.event.repository.description }}
           LAUNCHPAD_COLLECTS_PERSONAL_DATA: ${{ vars.LAUNCHPAD_COLLECTS_PERSONAL_DATA || 'true' }}
-          GH_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
+          BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
         run: node scripts/bootstrap.mjs run
