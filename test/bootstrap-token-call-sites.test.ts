@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { gitPushAuthProcessEnv } from "../scripts/lib/bootstrap-install.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const bootstrapScript = join(repoRoot, "scripts/bootstrap.mjs");
@@ -231,10 +230,11 @@ describe("bootstrap.mjs token isolation at call sites (subprocess)", () => {
     for (const arg of push.argv ?? []) {
       expect(arg).not.toContain(FAKE_TOKEN);
     }
-    const expectedPushEnv = gitPushAuthProcessEnv(FAKE_TOKEN);
-    expect(push.env.GIT_CONFIG_COUNT).toBe(expectedPushEnv.GIT_CONFIG_COUNT);
-    expect(push.env.GIT_CONFIG_KEY_0).toBe(expectedPushEnv.GIT_CONFIG_KEY_0);
-    expect(push.env.GIT_CONFIG_VALUE_0).toBe(expectedPushEnv.GIT_CONFIG_VALUE_0);
+    expect(push.env.GIT_CONFIG_COUNT).toBe("1");
+    expect(push.env.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraheader");
+    expect(push.env.GIT_CONFIG_VALUE_0).toBe(
+      `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${FAKE_TOKEN}`).toString("base64")}`,
+    );
 
     const settingsCalls = run.log.filter(
       (entry) =>
