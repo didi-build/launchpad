@@ -17,7 +17,7 @@ Bootstrap runs `init-project` in a job that checks out with `BOOTSTRAP_TOKEN`. W
 - Token checkout uses `persist-credentials: false` so the PAT is not written to `.git/config`.
 - When init runs nodrift, Bootstrap runs `npm ci --ignore-scripts` and `init-project` (including `nodrift init`) with **no** `GH_TOKEN`, `BOOTSTRAP_TOKEN`, or `GITHUB_TOKEN` in the child process environment.
 - The init commit runs with `HUSKY=0` so Husky hooks do not run.
-- `git push` passes the token only via `git -c http.extraheader=AUTHORIZATION: bearer …` on that push command; the remote URL has no embedded credentials and the token is not written to disk.
+- `git push` passes basic x-access-token auth only via `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_0` / `GIT_CONFIG_VALUE_0` on that process; the token is not in argv, the remote URL, or on disk.
 - `repo-settings` receives `GH_TOKEN` only for those subprocess calls.
 
 This is the documented exception to the bootstrap runbook rule that forbids unrestricted `npm ci` and lifecycle scripts in the token job.

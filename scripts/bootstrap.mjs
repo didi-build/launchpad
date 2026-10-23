@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   BOOTSTRAP_NPM_CI_ARGS,
-  gitPushWithAuthHeaderArgs,
+  gitPushArgs,
+  gitPushAuthProcessEnv,
 } from "./lib/bootstrap-install.mjs";
 import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
 import { validateCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
@@ -104,12 +105,11 @@ function runInitProject(args) {
   return result.status === 0;
 }
 
-function runNpm(args, extraEnv = {}, { stripTokens = false } = {}) {
-  const base = stripTokens ? envWithoutBootstrapTokens(process.env) : process.env;
+function runNpm(args, extraEnv = {}) {
   const result = spawnSync("npm", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...base, ...extraEnv },
+    env: { ...envWithoutBootstrapTokens(process.env), ...extraEnv },
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -179,7 +179,7 @@ function runGit(args, extraEnv = {}) {
 }
 
 function runGitPushWithToken(token, repository) {
-  return runGit(gitPushWithAuthHeaderArgs(token, repository));
+  return runGit(gitPushArgs(repository), gitPushAuthProcessEnv(token));
 }
 
 function planSummaryMarkdown(ctx, extras = {}) {
@@ -350,7 +350,7 @@ function handleRunMode() {
         process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
       )
     ) {
-      const ci = runNpm(BOOTSTRAP_NPM_CI_ARGS, {}, { stripTokens: true });
+      const ci = runNpm(BOOTSTRAP_NPM_CI_ARGS);
       if (!ci.ok) {
         console.error(
           "npm ci --ignore-scripts failed before init-project (required for @didi-build/nodrift init).",

@@ -52,4 +52,19 @@ describe("bootstrap token env (unit)", () => {
     );
     expect(probe.status).toBe(0);
   });
+
+  it("repo-settings child env keeps only GH_TOKEN from extra env", () => {
+    const childEnv: NodeJS.ProcessEnv = {
+      ...envWithoutBootstrapTokens({
+        PATH: "/bin",
+        BOOTSTRAP_TOKEN: "bootstrap",
+        GITHUB_TOKEN: "actions",
+        GH_TOKEN: "stale",
+      }),
+      GH_TOKEN: "for-gh-cli",
+    };
+    expect(childEnv.GH_TOKEN).toBe("for-gh-cli");
+    expect(childEnv.BOOTSTRAP_TOKEN).toBeUndefined();
+    expect(childEnv.GITHUB_TOKEN).toBeUndefined();
+  });
 });

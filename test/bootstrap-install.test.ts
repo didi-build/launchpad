@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BOOTSTRAP_NPM_CI_ARGS,
-  gitPushWithAuthHeaderArgs,
+  gitPushArgs,
+  gitPushAuthProcessEnv,
 } from "../scripts/lib/bootstrap-install.mjs";
 
 describe("bootstrap install helpers (unit)", () => {
@@ -9,12 +10,24 @@ describe("bootstrap install helpers (unit)", () => {
     expect(BOOTSTRAP_NPM_CI_ARGS).toEqual(["ci", "--ignore-scripts"]);
   });
 
-  it("scopes push auth to http.extraheader without token in remote URL", () => {
-    const args = gitPushWithAuthHeaderArgs("test-token", "org/repo");
-    expect(args[0]).toBe("-c");
-    expect(args[1]).toContain("http.extraheader=");
-    expect(args[1]).toContain("bearer test-token");
-    expect(args[3]).toBe("https://github.com/org/repo.git");
-    expect(args[3]).not.toContain("test-token");
+  it("scopes push auth to GIT_CONFIG env without token in git argv", () => {
+    const token = "secret-pat-value";
+    const args = gitPushArgs("org/repo");
+    for (const arg of args) {
+      expect(arg).not.toContain(token);
+    }
+    expect(args).toEqual(["push", "https://github.com/org/repo.git", "HEAD"]);
+    expect(args[1]).not.toContain(token);
+
+    const pushEnv = gitPushAuthProcessEnv(token);
+    expect(pushEnv.GIT_CONFIG_COUNT).toBe("1");
+    expect(pushEnv.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraheader");
+    const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+    expect(pushEnv.GIT_CONFIG_VALUE_0).toBe(`AUTHORIZATION: basic ${basic}`);
+
+    const unrelated: NodeJS.ProcessEnv = { PATH: "/bin" };
+    expect(unrelated.GIT_CONFIG_COUNT).toBeUndefined();
+    expect(unrelated.GIT_CONFIG_KEY_0).toBeUndefined();
+    expect(unrelated.GIT_CONFIG_VALUE_0).toBeUndefined();
   });
 });
