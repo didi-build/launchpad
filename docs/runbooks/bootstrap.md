@@ -12,7 +12,19 @@ On eligible runs, Bootstrap:
 
 The workflow does **not** run `npm ci` or install dependencies in the bootstrap job (the PAT is stored in `.git/config` by `actions/checkout`; no install scripts may run in that job).
 
-Exception for nodrift scaffolding: [ADR 0003 section A](../decisions/0003-nodrift-in-launchpad.md#a-bootstrap-install-and-token-use) (`npm ci --ignore-scripts`, `persist-credentials: false`, token only on `git push`, `HUSKY=0` on the init commit).
+### Token job: what actually runs (and why it is safe)
+
+After the read-only plan step, eligible runs use a second checkout with `persist-credentials: false`, so the PAT is **not** stored in `.git/config`.
+
+| Step                                         | Command                              | Token in child env?                                               | Lifecycle scripts?      |
+| -------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------- | ----------------------- |
+| Nodrift install (when personal data enabled) | `npm ci --ignore-scripts`            | No                                                                | No (`--ignore-scripts`) |
+| Init                                         | `init-project` / `nodrift init`      | No                                                                | N/A                     |
+| Init commit                                  | `git commit` with `HUSKY=0`          | No                                                                | No (Husky disabled)     |
+| Push init commit                             | `git -c http.extraheader=… push`     | Only on this `git` invocation (header), not in remote URL or disk | N/A                     |
+| Settings                                     | `repo-settings --apply` / `--verify` | `GH_TOKEN` only for these subprocesses                            | N/A                     |
+
+`init-project` and `npm ci --ignore-scripts` therefore satisfy the rule above: dependency install uses `--ignore-scripts`, and no bootstrap token is passed into those child processes. Push and `repo-settings` are the only steps that use the PAT, each scoped to that command. See [ADR 0003 section A](../decisions/0003-nodrift-in-launchpad.md#a-bootstrap-install-and-token-use).
 
 ## Plan table
 

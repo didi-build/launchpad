@@ -56,6 +56,7 @@ describe("run-nodrift-check (subprocess)", () => {
     const result = runCheck(dir);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("nodrift check skipped");
+    expect(result.stdout).toContain("data-map.yml");
   });
 
   it("fails when manifest exists but the kit is not installed", () => {

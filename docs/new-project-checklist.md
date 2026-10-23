@@ -25,7 +25,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Replace Launchpad placeholders
 
-- [ ] If Bootstrap did not run, run `npm install`, then `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"] [--personal-data | --no-personal-data]`. This moves [README.project.md](../README.project.md) to `README.md` and [LICENSE.project](../LICENSE.project) to `LICENSE` (optional **owner** defaults to `Didi Build`). Answer **yes** to personal data (or pass `--personal-data`) when the project will collect personal data; that runs `@didi-build/nodrift init` and enables `npm run nodrift` in `npm run check`.
+- [ ] If Bootstrap did not run, run `npm install`, then `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"] [--personal-data | --no-personal-data]`. This moves [README.project.md](../README.project.md) to `README.md` and [LICENSE.project](../LICENSE.project) to `LICENSE` (optional **owner** defaults to `Didi Build`). Interactive init defaults to **yes** for personal data (`Y/n`); non-interactive runs must pass a flag or set `LAUNCHPAD_COLLECTS_PERSONAL_DATA`. When personal data collection is enabled, `@didi-build/nodrift init` runs and `npm run nodrift` is included in `npm run check`.
 - [ ] Confirm **`LICENSE`** and **`package.json` `license`** match your project (`UNLICENSED` + proprietary `LICENSE` is the default after init; adjust if you use another license)
 - [ ] Keep **`LICENSES/launchpad-MIT.txt`** (Launchpad MIT notice; required by `npm run check`)
 - [ ] Search for `Launchpad` / `launchpad` leftovers in README and docs

@@ -74,6 +74,29 @@ export function parsePersonalDataFlags(argv) {
 
 /**
  * @param {string | undefined} raw
+ * @returns {boolean | undefined}
+ */
+export function parseCollectsPersonalDataEnv(raw) {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  const value = String(raw).trim().toLowerCase();
+  if (value === "") {
+    return undefined;
+  }
+  if (["1", "true", "yes", "y"].includes(value)) {
+    return true;
+  }
+  if (["0", "false", "no", "n"].includes(value)) {
+    return false;
+  }
+  throw new Error(
+    "Invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA: use true/false, yes/no, or 1/0.",
+  );
+}
+
+/**
+ * @param {string | undefined} raw
  * @returns {{ ok: true } | { ok: false; message: string }}
  */
 export function validateCollectsPersonalDataEnv(raw) {
@@ -97,29 +120,6 @@ export function validateCollectsPersonalDataEnv(raw) {
  */
 export function bootstrapCollectsPersonalData(raw) {
   return parseCollectsPersonalDataEnv(raw) ?? true;
-}
-
-/**
- * @param {string | undefined} raw
- * @returns {boolean | undefined}
- */
-export function parseCollectsPersonalDataEnv(raw) {
-  if (raw === undefined || raw === null) {
-    return undefined;
-  }
-  const value = String(raw).trim().toLowerCase();
-  if (value === "") {
-    return undefined;
-  }
-  if (["1", "true", "yes", "y"].includes(value)) {
-    return true;
-  }
-  if (["0", "false", "no", "n"].includes(value)) {
-    return false;
-  }
-  throw new Error(
-    "Invalid LAUNCHPAD_COLLECTS_PERSONAL_DATA: use true/false, yes/no, or 1/0.",
-  );
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
+import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
 import {
   parseInteractivePersonalDataAnswer,
   parsePersonalDataFlags,
@@ -166,6 +167,7 @@ if (resolved.collects) {
   const init = spawnSync(process.execPath, [nodrift.cliPath, "init"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: envWithoutBootstrapTokens(process.env),
   });
   if (init.stdout) {
     process.stdout.write(init.stdout);

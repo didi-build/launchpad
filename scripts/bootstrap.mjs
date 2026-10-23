@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BOOTSTRAP_NPM_CI_ARGS,
+  gitPushWithAuthHeaderArgs,
+} from "./lib/bootstrap-install.mjs";
 import { envWithoutBootstrapTokens } from "./lib/bootstrap-token-env.mjs";
 import { validateCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
 import {
@@ -175,9 +179,7 @@ function runGit(args, extraEnv = {}) {
 }
 
 function runGitPushWithToken(token, repository) {
-  const encoded = encodeURIComponent(token);
-  const pushUrl = `https://x-access-token:${encoded}@github.com/${repository}.git`;
-  return runGit(["push", pushUrl, "HEAD"]);
+  return runGit(gitPushWithAuthHeaderArgs(token, repository));
 }
 
 function planSummaryMarkdown(ctx, extras = {}) {
@@ -348,7 +350,7 @@ function handleRunMode() {
         process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA,
       )
     ) {
-      const ci = runNpm(["ci", "--ignore-scripts"], {}, { stripTokens: true });
+      const ci = runNpm(BOOTSTRAP_NPM_CI_ARGS, {}, { stripTokens: true });
       if (!ci.ok) {
         console.error(
           "npm ci --ignore-scripts failed before init-project (required for @didi-build/nodrift init).",

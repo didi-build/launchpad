@@ -51,5 +51,5 @@ export function formatNodriftMissingError({ context }) {
   if (context === "init") {
     return "Cannot run nodrift init: install dependencies first (npm ci), and ensure @didi-build/nodrift is listed in devDependencies.";
   }
-  return "Privacy scaffolding is present but @didi-build/nodrift is not installed. Run npm ci, then npm run check.";
+  return "@didi-build/nodrift is not installed but privacy scaffolding is present (.nodrift/manifest.json or docs/privacy/data-map.yml). Run npm ci, then npm run check.";
 }
