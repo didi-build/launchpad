@@ -7,10 +7,10 @@
   "launchpadTemplate": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "scripts": {
-    "check": "npm run conflict-markers && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run secrets && npm run secret-usage && npm run placeholders && npm run attribution",
+    "check": "npm run conflict-markers && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run secrets && npm run secret-usage && npm run placeholders && npm run attribution && npm run nodrift",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
@@ -22,6 +22,7 @@
     "secret-usage": "node scripts/check-secret-usage.mjs",
     "placeholders": "node scripts/check-placeholders.mjs",
     "attribution": "node scripts/check-attribution.mjs",
+    "nodrift": "node scripts/run-nodrift-check.mjs",
     "init-project": "node scripts/init-project.mjs",
     "repo-settings": "node scripts/repo-settings.mjs",
     "verify-action-pins": "node scripts/verify-action-pins.mjs",
@@ -38,6 +39,7 @@
     ]
   },
   "devDependencies": {
+    "@didi-build/nodrift": "0.1.0",
     "@eslint/js": "9.39.5",
     "@secretlint/secretlint-rule-preset-recommend": "10.2.2",
     "@types/node": "22.20.5",

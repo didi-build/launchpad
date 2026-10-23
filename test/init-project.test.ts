@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -95,6 +96,24 @@ describe("init-project (unit)", () => {
     expect(readFileSync(join(dir, "LICENSES/launchpad-MIT.txt"), "utf8")).toBe(
       LAUNCHPAD_MIT_SNAPSHOT,
     );
+  });
+
+  it("runs nodrift init when --personal-data is set", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
+    symlinkSync(
+      join(workspaceRoot, "node_modules"),
+      join(dir, "node_modules"),
+      "junction",
+    );
+    execFileSync(
+      "node",
+      [initScript, "my-app", "My App", "Purpose", "Acme Corp", "--personal-data"],
+      { cwd: dir, encoding: "utf8" },
+    );
+    expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(true);
+    expect(existsSync(join(dir, "docs/privacy/data-map.yml"))).toBe(true);
   });
 
   it("does not clobber README on re-run", () => {

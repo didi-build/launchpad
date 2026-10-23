@@ -39,5 +39,6 @@ jobs:
         env:
           HAS_BOOTSTRAP_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN != '' }}
           LAUNCHPAD_REPO_DESCRIPTION: ${{ github.event.repository.description }}
+          LAUNCHPAD_COLLECTS_PERSONAL_DATA: ${{ vars.LAUNCHPAD_COLLECTS_PERSONAL_DATA || 'true' }}
           GH_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}
         run: node scripts/bootstrap.mjs run

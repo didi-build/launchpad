@@ -199,7 +199,7 @@ export function resolveTokenPolicy({
 export const MANUAL_BOOTSTRAP_FALLBACK = [
   "Bootstrap skipped: no BOOTSTRAP_TOKEN repository secret.",
   "Manual fallback:",
-  '  npm run init-project -- <slug> "<display name>" ["<purpose>"]',
+  '  npm run init-project -- <slug> "<display name>" ["<purpose>"] [--personal-data | --no-personal-data]',
   "  npm run repo-settings -- --apply",
   "  npm run repo-settings -- --verify",
 ].join("\n");

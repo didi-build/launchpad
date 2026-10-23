@@ -6,11 +6,11 @@ Launchpad-derived repositories run the **Bootstrap** workflow automatically. It 
 
 On eligible runs, Bootstrap:
 
-1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). Only when the repo is still a template checkout. **When Bootstrap will actually run init**, the GitHub repository description must be set; if it is empty, the plan step fails with a clear message (skipped runs and already-initialized repos are not affected).
+1. Runs `scripts/init-project.mjs` with slug, display name, purpose, and **owner** derived from the repository name, `LAUNCHPAD_REPO_DESCRIPTION` (set from the GitHub repository description in the workflow), and `GITHUB_REPOSITORY_OWNER` (`didi-build` → `Didi Build`; other owners use the login as-is). **`LAUNCHPAD_COLLECTS_PERSONAL_DATA`** (workflow env, default `true`) controls whether init also runs `@didi-build/nodrift init`; set the repository variable `LAUNCHPAD_COLLECTS_PERSONAL_DATA` to `false` to opt out. When personal data collection is enabled, Bootstrap runs **`npm ci`** first so the pinned kit is on disk. Only when the repo is still a template checkout. **When Bootstrap will actually run init**, the GitHub repository description must be set; if it is empty, the plan step fails with a clear message (skipped runs and already-initialized repos are not affected).
 2. Commits the result to the default branch as `github-actions[bot]` (including removing Launchpad example code and setting `package.json` `description` from the repo purpose).
 3. Runs `npm run repo-settings -- --apply` then `-- --verify` using the bootstrap token (branch protection, auto-merge, delete head branches, squash-only merges).
 
-The workflow does **not** run `npm ci` or install dependencies in the bootstrap job (the PAT is stored in `.git/config` by `actions/checkout`; no install scripts may run in that job).
+The workflow runs **`npm ci` only when init will run nodrift** (personal data collection enabled). It does not install dependencies for settings-only runs. The PAT is stored in `.git/config` by `actions/checkout`; keep `BOOTSTRAP_TOKEN` scoped and rotate it on schedule.
 
 ## Plan table
 
@@ -72,7 +72,7 @@ If Bootstrap skips because no token is configured:
 
 ```bash
 npm install
-npm run init-project -- <slug> "<display name>" ["<purpose>"] ["<owner>"]
+npm run init-project -- <slug> "<display name>" ["<purpose>"] ["<owner>"] [--personal-data | --no-personal-data]
 npm run repo-settings -- --apply
 npm run repo-settings -- --verify
 ```

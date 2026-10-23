@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseCollectsPersonalDataEnv } from "./lib/collects-personal-data.mjs";
 import {
   deriveBootstrapPlan,
   deriveInitArgs,
@@ -85,6 +86,7 @@ function runInitProject(args) {
   const result = spawnSync(process.execPath, [initProjectScript, ...args], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: process.env,
   });
   if (result.stdout) {
     process.stdout.write(result.stdout);
@@ -304,6 +306,19 @@ function handleRunMode() {
   const summaryExtras = { ranInit: false, ranSettings: false, verifyOk: undefined };
 
   if (ctx.plan.init) {
+    const collectsPersonalData =
+      parseCollectsPersonalDataEnv(process.env.LAUNCHPAD_COLLECTS_PERSONAL_DATA) ??
+      true;
+    if (collectsPersonalData) {
+      const ci = runNpm(["ci"]);
+      if (!ci.ok) {
+        console.error(
+          "npm ci failed before init-project (required for @didi-build/nodrift init).",
+        );
+        process.exit(1);
+      }
+    }
+
     const ok = runInitProject([
       initArgs.slug,
       initArgs.displayName,
