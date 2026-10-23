@@ -6,11 +6,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +19,15 @@ const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const bootstrapScript = join(repoRoot, "scripts/bootstrap.mjs");
 
 const FAKE_TOKEN = "fake-bootstrap-pat-for-didi-807-tests";
+const FAKE_TOKEN_BASIC_B64 = Buffer.from(`x-access-token:${FAKE_TOKEN}`).toString(
+  "base64",
+);
 const TOKEN_ENV_KEYS = ["GH_TOKEN", "BOOTSTRAP_TOKEN", "GITHUB_TOKEN"] as const;
+const PUSH_ARGV = [
+  "push",
+  "https://github.com/didi-build/token-isolation-fixture.git",
+  "HEAD",
+] as const;
 
 type StubLogEntry = {
   tool: string;
@@ -33,11 +42,85 @@ function envExposesBootstrapToken(env: Record<string, string | undefined>) {
   });
 }
 
+function gitConfigEnvKeys(env: Record<string, string | undefined>) {
+  return Object.keys(env).filter(
+    (key) =>
+      key === "GIT_CONFIG_COUNT" ||
+      key.startsWith("GIT_CONFIG_KEY_") ||
+      key.startsWith("GIT_CONFIG_VALUE_"),
+  );
+}
+
+function envValueContainsTokenLeak(value: string | undefined) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  const text = String(value);
+  return text.includes(FAKE_TOKEN) || text.includes(FAKE_TOKEN_BASIC_B64);
+}
+
+function assertEnvHasNoCredentialMaterial(env: Record<string, string | undefined>) {
+  expect(gitConfigEnvKeys(env)).toEqual([]);
+  for (const value of Object.values(env)) {
+    expect(envValueContainsTokenLeak(value)).toBe(false);
+  }
+}
+
+function assertRepoSettingsEnv(env: Record<string, string | undefined>) {
+  expect(env.GH_TOKEN).toBe(FAKE_TOKEN);
+  expect(env.BOOTSTRAP_TOKEN).toBeUndefined();
+  expect(env.GITHUB_TOKEN).toBeUndefined();
+  expect(gitConfigEnvKeys(env)).toEqual([]);
+  for (const [key, value] of Object.entries(env)) {
+    if (key === "GH_TOKEN") {
+      continue;
+    }
+    expect(envValueContainsTokenLeak(value)).toBe(false);
+  }
+}
+
 function parseStubLog(text: string): StubLogEntry[] {
   return text
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => JSON.parse(line) as StubLogEntry);
+}
+
+function resolveRealGitBinary() {
+  const which = spawnSync("which", ["git"], { encoding: "utf8" });
+  if (which.status !== 0 || !which.stdout.trim()) {
+    throw new Error(
+      "Could not resolve the real git binary (which git failed). These subprocess tests require git on PATH before stubs are installed.",
+    );
+  }
+  return which.stdout.trim();
+}
+
+function hermeticGitEnv(dir: string) {
+  const globalConfig = join(dir, "empty-gitconfig");
+  writeFileSync(globalConfig, "\n");
+  return {
+    GIT_CONFIG_GLOBAL: globalConfig,
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+}
+
+function runRealGit(
+  realGit: string,
+  cwd: string,
+  args: string[],
+  extraEnv: Record<string, string>,
+) {
+  const result = spawnSync(realGit, args, {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...extraEnv },
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `git ${args.join(" ")} failed (status ${result.status ?? "unknown"}): ${result.stderr ?? result.stdout}`,
+    );
+  }
 }
 
 function installRecordingStubs(dir: string, logPath: string) {
@@ -93,7 +176,11 @@ process.exit(0);
 import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 const logPath = process.env.BOOTSTRAP_STUB_LOG;
-const realGit = process.env.BOOTSTRAP_REAL_GIT ?? "git";
+const realGit = process.env.BOOTSTRAP_REAL_GIT;
+if (!realGit) {
+  console.error("BOOTSTRAP_REAL_GIT is required");
+  process.exit(1);
+}
 const argv = process.argv.slice(2);
 const env = process.env;
 const picked = {};
@@ -119,7 +206,8 @@ process.exit(result.status ?? 1);
   return { bin, recorderPath, logPath };
 }
 
-function seedBootstrapInitFixture(dir: string) {
+function seedBootstrapInitFixture(dir: string, realGit: string) {
+  const gitEnv = hermeticGitEnv(dir);
   writeFileSync(
     join(dir, "README.project.md"),
     "# {{PROJECT_NAME}}\n\n{{PROJECT_PURPOSE}}\n",
@@ -135,35 +223,30 @@ function seedBootstrapInitFixture(dir: string) {
   if (!existsSync(join(dir, "node_modules"))) {
     symlinkSync(join(repoRoot, "node_modules"), join(dir, "node_modules"));
   }
-  spawnSync("git", ["init", "-b", "main"], { cwd: dir, encoding: "utf8" });
-  spawnSync("git", ["config", "user.email", "test@example.com"], {
-    cwd: dir,
-    encoding: "utf8",
-  });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: dir, encoding: "utf8" });
+  runRealGit(realGit, dir, ["init", "-b", "main"], gitEnv);
+  runRealGit(realGit, dir, ["config", "user.email", "test@example.com"], gitEnv);
+  runRealGit(realGit, dir, ["config", "user.name", "Test"], gitEnv);
+  return gitEnv;
 }
 
-function resolveRealGitBinary() {
-  const which = spawnSync("which", ["git"], { encoding: "utf8" });
-  if (which.status === 0 && which.stdout.trim()) {
-    return which.stdout.trim();
-  }
-  return "git";
-}
-
-function runBootstrapInitWithStubs(dir: string) {
+function runBootstrapInitWithStubs(
+  dir: string,
+  realGit: string,
+  hermeticEnv: Record<string, string>,
+) {
   const logPath = join(dir, "stub-log.jsonl");
-  const realGit = resolveRealGitBinary();
   const { bin, recorderPath } = installRecordingStubs(dir, logPath);
   const summaryPath = join(dir, "step-summary.md");
   writeFileSync(summaryPath, "");
 
+  const pathPrefix = `${bin}${delimiter}${process.env.PATH ?? ""}`;
   const result = spawnSync(process.execPath, [bootstrapScript, "run"], {
     cwd: dir,
     encoding: "utf8",
     env: {
       ...process.env,
-      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      ...hermeticEnv,
+      PATH: pathPrefix,
       BOOTSTRAP_STUB_LOG: logPath,
       BOOTSTRAP_REAL_GIT: realGit,
       NODE_OPTIONS: `--import ${recorderPath}`,
@@ -193,63 +276,81 @@ function runBootstrapInitWithStubs(dir: string) {
   };
 }
 
-describe("bootstrap.mjs token isolation at call sites (subprocess)", () => {
-  it("keeps bootstrap tokens out of npm ci, init, and commit; push uses GIT_CONFIG only", () => {
-    const dir = mkdtempSync(join(tmpdir(), "bootstrap-call-sites-"));
-    seedBootstrapInitFixture(dir);
+// Extensionless npm/git stubs are not spawnable on Windows; bootstrap CI uses ubuntu-latest.
+describe.skipIf(process.platform === "win32")(
+  "bootstrap.mjs token isolation at call sites (subprocess)",
+  () => {
+    it("keeps bootstrap tokens out of npm ci, init, and commit; push uses GIT_CONFIG only", () => {
+      const realGit = resolveRealGitBinary();
+      const dir = mkdtempSync(join(tmpdir(), "bootstrap-call-sites-"));
+      try {
+        const hermeticEnv = seedBootstrapInitFixture(dir, realGit);
+        const run = runBootstrapInitWithStubs(dir, realGit, hermeticEnv);
+        expect(run.status).toBe(0);
 
-    const run = runBootstrapInitWithStubs(dir);
-    expect(run.status).toBe(0);
+        const npmCi = run.log.filter(
+          (entry) => entry.tool === "npm" && entry.argv?.[0] === "ci",
+        );
+        expect(npmCi.length).toBeGreaterThan(0);
+        for (const entry of npmCi) {
+          expect(envExposesBootstrapToken(entry.env)).toBe(false);
+          assertEnvHasNoCredentialMaterial(entry.env);
+          expect(entry.argv).toEqual(["ci", "--ignore-scripts"]);
+        }
 
-    const npmCi = run.log.filter(
-      (entry) => entry.tool === "npm" && entry.argv?.[0] === "ci",
-    );
-    expect(npmCi.length).toBeGreaterThan(0);
-    for (const entry of npmCi) {
-      expect(envExposesBootstrapToken(entry.env)).toBe(false);
-      expect(entry.argv).toEqual(["ci", "--ignore-scripts"]);
-    }
+        const initEntries = run.log.filter((entry) => entry.tool === "init");
+        expect(initEntries.length).toBe(1);
+        expect(envExposesBootstrapToken(initEntries[0].env)).toBe(false);
+        assertEnvHasNoCredentialMaterial(initEntries[0].env);
 
-    const initEntries = run.log.filter((entry) => entry.tool === "init");
-    expect(initEntries.length).toBe(1);
-    expect(envExposesBootstrapToken(initEntries[0].env)).toBe(false);
+        const nonPushGit = run.log.filter(
+          (entry) => entry.tool === "git" && entry.argv?.[0] !== "push",
+        );
+        expect(nonPushGit.length).toBeGreaterThan(0);
+        for (const entry of nonPushGit) {
+          expect(envExposesBootstrapToken(entry.env)).toBe(false);
+          assertEnvHasNoCredentialMaterial(entry.env);
+        }
 
-    const commitEntries = run.log.filter(
-      (entry) => entry.tool === "git" && entry.argv?.[0] === "commit",
-    );
-    expect(commitEntries.length).toBe(1);
-    expect(envExposesBootstrapToken(commitEntries[0].env)).toBe(false);
-    expect(commitEntries[0].env.HUSKY).toBe("0");
+        const commitEntries = run.log.filter(
+          (entry) => entry.tool === "git" && entry.argv?.[0] === "commit",
+        );
+        expect(commitEntries.length).toBe(1);
+        expect(commitEntries[0].env.HUSKY).toBe("0");
 
-    const pushEntries = run.log.filter(
-      (entry) => entry.tool === "git" && entry.argv?.[0] === "push",
-    );
-    expect(pushEntries.length).toBe(1);
-    const push = pushEntries[0];
-    expect(envExposesBootstrapToken(push.env)).toBe(false);
-    for (const arg of push.argv ?? []) {
-      expect(arg).not.toContain(FAKE_TOKEN);
-    }
-    expect(push.env.GIT_CONFIG_COUNT).toBe("1");
-    expect(push.env.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraheader");
-    expect(push.env.GIT_CONFIG_VALUE_0).toBe(
-      `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${FAKE_TOKEN}`).toString("base64")}`,
-    );
+        const pushEntries = run.log.filter(
+          (entry) => entry.tool === "git" && entry.argv?.[0] === "push",
+        );
+        expect(pushEntries.length).toBe(1);
+        const push = pushEntries[0];
+        expect(envExposesBootstrapToken(push.env)).toBe(false);
+        expect(push.argv).toEqual([...PUSH_ARGV]);
+        for (const arg of push.argv ?? []) {
+          expect(arg).not.toContain(FAKE_TOKEN);
+          expect(arg).not.toContain(FAKE_TOKEN_BASIC_B64);
+        }
+        expect(push.env.GIT_CONFIG_COUNT).toBe("1");
+        expect(push.env.GIT_CONFIG_KEY_0).toBe("http.https://github.com/.extraheader");
+        expect(push.env.GIT_CONFIG_VALUE_0).toBe(
+          `AUTHORIZATION: basic ${FAKE_TOKEN_BASIC_B64}`,
+        );
 
-    const settingsCalls = run.log.filter(
-      (entry) =>
-        entry.tool === "npm" &&
-        entry.argv?.[0] === "run" &&
-        entry.argv?.[1] === "repo-settings",
-    );
-    expect(settingsCalls.length).toBe(2);
-    for (const entry of settingsCalls) {
-      expect(entry.env.GH_TOKEN).toBe(FAKE_TOKEN);
-      expect(entry.env.BOOTSTRAP_TOKEN).toBeUndefined();
-      expect(entry.env.GITHUB_TOKEN).toBeUndefined();
-    }
+        const settingsCalls = run.log.filter(
+          (entry) =>
+            entry.tool === "npm" &&
+            entry.argv?.[0] === "run" &&
+            entry.argv?.[1] === "repo-settings",
+        );
+        expect(settingsCalls.length).toBe(2);
+        for (const entry of settingsCalls) {
+          assertRepoSettingsEnv(entry.env);
+        }
 
-    expect(run.gitConfig).not.toContain(FAKE_TOKEN);
-    expect(run.gitConfig).not.toMatch(/extraheader/i);
-  });
-});
+        expect(run.gitConfig).not.toContain(FAKE_TOKEN);
+        expect(run.gitConfig).not.toMatch(/extraheader/i);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  },
+);
