@@ -101,10 +101,15 @@ describe("init-project (unit)", () => {
       join(dir, "wrangler.jsonc"),
       '{"name":"wrong-name","compatibility_date":"2026-10-26"}\n',
     );
-    const pkgBefore = readFileSync(join(dir, "package.json"), "utf8");
+    const pkgBefore = readFileSync(join(dir, "package.json"));
+    const readmeBefore = readFileSync(join(dir, "README.project.md"));
+    const licenseBefore = readFileSync(join(dir, "LICENSE.project"));
+    const wranglerBefore = readFileSync(join(dir, "wrangler.jsonc"));
     runInitFails(dir, ["my-app", "My App", "--no-personal-data"]);
-    expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(pkgBefore);
-    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(readFileSync(join(dir, "package.json"))).toEqual(pkgBefore);
+    expect(readFileSync(join(dir, "README.project.md"))).toEqual(readmeBefore);
+    expect(readFileSync(join(dir, "LICENSE.project"))).toEqual(licenseBefore);
+    expect(readFileSync(join(dir, "wrangler.jsonc"))).toEqual(wranglerBefore);
     expect(existsSync(join(dir, "README.md"))).toBe(false);
   });
 

@@ -44,9 +44,9 @@ describe("parseWranglerJsonc (unit)", () => {
   it('does not strip literal ", }" inside strings', () => {
     const text = `{
   "name": "launchpad",
-  "note": "comma, brace } inside"
+  "note": "comma, } and [1, ] inside"
 }`;
-    expect(parseWranglerJsonc(text).note).toBe("comma, brace } inside");
+    expect(parseWranglerJsonc(text).note).toBe("comma, } and [1, ] inside");
   });
 
   it("parses trailing commas inside arrays such as [1, ]", () => {
