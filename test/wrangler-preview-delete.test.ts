@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { isPreviewMissingError } from "../scripts/lib/wrangler-preview-delete-lib.mjs";
 
 describe("isPreviewMissingError (unit)", () => {
-  it("treats 404 and preview-not-found as missing", () => {
-    expect(isPreviewMissingError("Error: HTTP 404 Not Found")).toBe(true);
+  it("treats preview-not-found as missing", () => {
     expect(isPreviewMissingError("Preview pr-1 not found in account")).toBe(true);
+  });
+
+  it("does not treat generic HTTP 404 as missing preview", () => {
+    expect(isPreviewMissingError("Error: HTTP 404 Not Found")).toBe(false);
   });
 
   it("does not treat auth or generic errors as missing", () => {

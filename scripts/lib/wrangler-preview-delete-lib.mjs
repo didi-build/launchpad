@@ -5,10 +5,6 @@ import { spawnSync } from "node:child_process";
  * @returns {boolean}
  */
 export function isPreviewMissingError(detail) {
-  const lower = detail.toLowerCase();
-  if (/\b404\b/.test(lower)) {
-    return true;
-  }
   return /preview[^\n]{0,120}not found/i.test(detail);
 }
 

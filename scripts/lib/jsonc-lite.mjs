@@ -3,6 +3,16 @@
  * the MIT-licensed jsonc-parser project (Microsoft); see LICENSES/jsonc-parser-MIT.txt.
  */
 
+const UTF8_BOM = "\uFEFF";
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripLeadingUtf8Bom(text) {
+  return text.startsWith(UTF8_BOM) ? text.slice(UTF8_BOM.length) : text;
+}
+
 /**
  * @param {string} text
  * @param {number} start
@@ -205,7 +215,7 @@ function stripTrailingCommas(jsonText) {
  * @returns {Record<string, unknown>}
  */
 export function parseJsoncObject(text) {
-  const jsonText = jsoncToJsonText(text);
+  const jsonText = jsoncToJsonText(stripLeadingUtf8Bom(text));
   let value;
   try {
     value = JSON.parse(jsonText);
@@ -227,42 +237,43 @@ export function parseJsoncObject(text) {
  * @returns {string}
  */
 export function replaceTopLevelStringProperty(text, key, expectedValue, newValue) {
-  let i = skipWhitespaceAndComments(text, 0);
-  if (text[i] !== "{") {
+  const body = stripLeadingUtf8Bom(text);
+  let i = skipWhitespaceAndComments(body, 0);
+  if (body[i] !== "{") {
     throw new Error("wrangler.jsonc must be a JSON object");
   }
-  i = skipWhitespaceAndComments(text, i + 1);
-  while (i < text.length) {
-    i = skipWhitespaceAndComments(text, i);
-    if (text[i] === "}") {
+  i = skipWhitespaceAndComments(body, i + 1);
+  while (i < body.length) {
+    i = skipWhitespaceAndComments(body, i);
+    if (body[i] === "}") {
       break;
     }
-    if (text[i] === ",") {
+    if (body[i] === ",") {
       i += 1;
       continue;
     }
-    const keyRead = readJsonString(text, i);
-    i = skipWhitespaceAndComments(text, keyRead.end);
-    if (text[i] !== ":") {
+    const keyRead = readJsonString(body, i);
+    i = skipWhitespaceAndComments(body, keyRead.end);
+    if (body[i] !== ":") {
       throw new Error(`Expected ':' after key at offset ${i}`);
     }
-    const valueStart = skipWhitespaceAndComments(text, i + 1);
+    const valueStart = skipWhitespaceAndComments(body, i + 1);
     if (keyRead.value === key) {
-      if (text[valueStart] !== '"') {
+      if (body[valueStart] !== '"') {
         throw new Error(`Top-level "${key}" must be a string`);
       }
-      const valueRead = readJsonString(text, valueStart);
+      const valueRead = readJsonString(body, valueStart);
       if (valueRead.value !== expectedValue) {
         throw new Error(
           `wrangler.jsonc name must be "${expectedValue}" before rename (found "${String(valueRead.value)}")`,
         );
       }
       const escapedNew = JSON.stringify(newValue);
-      return text.slice(0, valueStart) + escapedNew + text.slice(valueRead.end);
+      return body.slice(0, valueStart) + escapedNew + body.slice(valueRead.end);
     }
-    i = skipValue(text, valueStart);
-    i = skipWhitespaceAndComments(text, i);
-    if (text[i] === ",") {
+    i = skipValue(body, valueStart);
+    i = skipWhitespaceAndComments(body, i);
+    if (body[i] === ",") {
       i += 1;
     }
   }

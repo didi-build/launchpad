@@ -11,6 +11,7 @@ This file is the single source of truth for how agents work in this repository. 
 
 ## Engineering standards
 
+- **`specs/` is designer-only.** Edit gallery code under `components/` only for props or tiny wiring fixes, not design or spec files (see `docs/component-gallery.md`).
 - Prefer clean, modular boundaries; small extensions over clever hacks; readable names; minimal duplication.
 - Follow this repo’s docs and config over your general habits.
 - Mark unknowns as unknown. Do not guess requirements or infrastructure.

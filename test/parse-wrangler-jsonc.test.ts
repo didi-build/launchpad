@@ -107,6 +107,18 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
   });
 
+  it("parses and renames wrangler.jsonc with a leading UTF-8 BOM (BOM dropped on write)", () => {
+    const bom = "\uFEFF";
+    const text = `${bom}{
+  "name": "launchpad",
+  "compatibility_date": "2026-10-26",
+}`;
+    expect(parseWranglerJsonc(text).name).toBe("launchpad");
+    const renamed = replaceWranglerWorkerName(text, "launchpad", "smoke-test");
+    expect(renamed.startsWith(bom)).toBe(false);
+    expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
+  });
+
   it("keeps block comments when renaming the worker", () => {
     const text = `{
   /* worker id */
