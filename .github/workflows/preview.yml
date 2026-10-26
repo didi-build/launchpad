@@ -1,0 +1,108 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  preview:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: npm ci
+        run: npm ci
+      - name: Build gallery assets
+        run: npm run build
+      - name: Create or update Preview
+        id: preview
+        run: |
+          set -euo pipefail
+          output="$(npx wrangler preview --name "pr-${{ github.event.pull_request.number }}" --json 2>/dev/null)"
+          preview_url="$(printf '%s' "$output" | jq -er '.preview.urls[0]')"
+          echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Probe gallery route
+        if: steps.preview.outcome == 'success'
+        run: curl --fail --show-error --silent --location "${PREVIEW_URL}/gallery" -o /dev/null
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+      - name: Gallery preview check
+        if: steps.preview.outcome == 'success'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const galleryUrl = `${process.env.PREVIEW_URL.replace(/\/$/, '')}/gallery`;
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'gallery-preview',
+              head_sha: context.payload.pull_request.head.sha,
+              status: 'completed',
+              conclusion: 'success',
+              output: {
+                title: 'Gallery preview',
+                summary: `[Open component gallery](${galleryUrl})`,
+              },
+            });
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+      - name: Build gallery preview summary
+        id: summary
+        if: always()
+        run: node scripts/gallery-preview-summary.mjs >> "$GITHUB_OUTPUT"
+        env:
+          DEPLOY_OUTCOME: ${{ steps.preview.outcome }}
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Find gallery preview comment
+        id: find-comment
+        if: always() && github.actor != 'dependabot[bot]'
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: github-actions[bot]
+          body-includes: "<!-- launchpad-gallery-preview -->"
+      - name: Update gallery preview comment
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: ${{ steps.summary.outputs.body }}
+      - name: Fail if preview deploy failed
+        if: steps.preview.outcome != 'success'
+        run: exit 1
+
+  cleanup:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: npm ci
+        run: npm ci
+      - name: Delete Preview
+        run: npx wrangler preview delete --name "pr-${{ github.event.pull_request.number }}" --skip-confirmation >/dev/null 2>&1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

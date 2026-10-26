@@ -56,6 +56,12 @@ jobs:
                 console.error('missing src/.gitkeep');
                 process.exit(1);
               }
+              for (const p of ['specs/example-button.md', 'components/example-button/ExampleButton.tsx', 'gallery/registry.ts']) {
+                if (!fs.existsSync(p)) {
+                  console.error('missing component gallery path:', p);
+                  process.exit(1);
+                }
+              }
               const hasNodrift = fs.existsSync('.nodrift/manifest.json');
               if (process.argv[1] === 'yes' && !hasNodrift) {
                 console.error('expected nodrift manifest after --personal-data');
