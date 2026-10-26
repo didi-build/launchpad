@@ -10,7 +10,9 @@ Pull requests from the same repository run [.github/workflows/preview.yml](../..
 2. `npx wrangler preview` deploys a named preview Worker (no wrangler stdout in CI logs).
 3. CI comments the preview URL (open `/gallery`) and posts a `gallery-preview` check.
 
-**Repository secrets (names only):** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Configure once per repo; fork PRs do not receive secrets.
+**Repository secrets (names only):** `CLOUDFLARE_API_TOKEN_PREVIEW`, `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because pull request branch code can reach this token. Configure once per repo; same-repo PRs only (fork PRs skip preview).
+
+When secrets are missing, the Preview workflow ends **neutral** (not failed) and updates a single PR comment that previews are not configured.
 
 Production deploy for your app is still project-specific; see below.
 

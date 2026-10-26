@@ -41,6 +41,10 @@ npm run build        # build gallery assets for Workers
 npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
 ```
 
+### PR gallery preview (optional)
+
+Same-repo pull requests run [.github/workflows/preview.yml](./.github/workflows/preview.yml). To enable Cloudflare Workers previews, add repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because pull request branch code can reach this token. Until secrets exist, the Preview job ends neutral and updates one PR comment that previews are not configured (expected for a new template). Fork PRs skip preview deploy.
+
 ## Contributing to Launchpad
 
 Open a PR against `didi-build/launchpad` and wait for review; do not merge your own PR unless the ticket says **merge when green**. See [AGENTS.md](./AGENTS.md) for agent rules (Dependabot auto-merge is the only exception).

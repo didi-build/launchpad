@@ -36,6 +36,6 @@ npm run dev:gallery   # Vite dev server with /gallery
 npm run build         # Production asset build (also runs in npm run check)
 ```
 
-PRs on `didi-build/launchpad` (and derived repos with Cloudflare secrets configured) get a **gallery preview** comment from CI with a link to `/gallery`.
+Same-repo pull requests get a **gallery preview** comment from CI. When repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID` are set, the comment links to `/gallery` on the Workers Preview. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because PR-branch code can reach this token. Without those secrets, the Preview job is **neutral** and the comment explains that previews are not configured (expected for a fresh template until you opt in). Fork PRs never run preview deploy.
 
 See [ADR 0004](./decisions/0004-component-gallery.md) for hosting and preview choices.
