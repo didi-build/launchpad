@@ -1,3 +1,4 @@
+import { GALLERY_PROBE_MARKER } from "./gallery-probe-marker.js";
 import { galleryEntries } from "./registry.js";
 import "./gallery.css";
 
@@ -33,6 +34,9 @@ function PropsTable({ props }: { props: Record<string, unknown> }) {
 export function App() {
   return (
     <div className="gallery-root">
+      <span className="gallery-probe-marker" hidden>
+        {GALLERY_PROBE_MARKER}
+      </span>
       <header className="gallery-header">
         <h1>Component gallery</h1>
         <p className="gallery-muted">

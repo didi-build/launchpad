@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
-      GALLERY_HTML_MARKER: launchpad-component-gallery
+      GALLERY_PROBE_MARKER: launchpad-gallery-bundle-probe
     permissions:
       contents: read
       pull-requests: write
@@ -64,12 +64,28 @@ jobs:
         if: steps.creds.outputs.ready == 'true' && steps.preview.outcome == 'success'
         run: |
           set -euo pipefail
-          body="$(curl --fail --show-error --silent --location "${PREVIEW_URL}/gallery")"
-          printf '%s' "$body" | grep -q "${GALLERY_HTML_MARKER}"
+          curl_common=(--fail --show-error --silent --location --retry 3 --retry-delay 5 --retry-all-errors)
+          gallery_html="$(curl "${curl_common[@]}" "${PREVIEW_URL}/gallery")"
+          if printf '%s' "$gallery_html" | grep -q "${GALLERY_PROBE_MARKER}"; then
+            echo "Gallery probe marker must not appear in SPA HTML (only in built assets)."
+            exit 1
+          fi
+          js_path="$(printf '%s' "$gallery_html" | grep -oE '/assets/index-[^"]+\.js' | head -1)"
+          if [ -z "$js_path" ]; then
+            echo "Could not find gallery JS asset in /gallery HTML."
+            exit 1
+          fi
+          js_body="$(curl "${curl_common[@]}" "${PREVIEW_URL%/}${js_path}")"
+          printf '%s' "$js_body" | grep -q "${GALLERY_PROBE_MARKER}"
+          noise_html="$(curl "${curl_common[@]}" "${PREVIEW_URL}/launchpad-gallery-probe-not-a-route")"
+          if printf '%s' "$noise_html" | grep -q "${GALLERY_PROBE_MARKER}"; then
+            echo "Gallery probe marker must not appear on non-gallery SPA HTML."
+            exit 1
+          fi
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
       - name: Gallery preview check (deployed)
-        if: !cancelled() && steps.creds.outputs.ready == 'true' && steps.preview.outcome == 'success' && steps.probe.outcome == 'success'
+        if: ${{ !cancelled() && steps.creds.outputs.ready == 'true' && steps.preview.outcome == 'success' && steps.probe.outcome == 'success' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -89,7 +105,7 @@ jobs:
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
       - name: Gallery preview check (unconfigured)
-        if: !cancelled() && steps.creds.outputs.ready != 'true'
+        if: ${{ !cancelled() && steps.creds.outputs.ready != 'true' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -107,7 +123,7 @@ jobs:
               },
             });
       - name: Gallery preview check (failed)
-        if: !cancelled() && steps.creds.outputs.ready == 'true' && (steps.preview.outcome != 'success' || steps.probe.outcome == 'failure')
+        if: ${{ !cancelled() && steps.creds.outputs.ready == 'true' && (steps.preview.outcome != 'success' || steps.probe.outcome == 'failure') }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
@@ -126,7 +142,7 @@ jobs:
             });
       - name: Set preview summary mode
         id: mode
-        if: !cancelled()
+        if: ${{ !cancelled() }}
         run: node scripts/gallery-preview-mode.mjs >> "$GITHUB_OUTPUT"
         env:
           CREDS_READY: ${{ steps.creds.outputs.ready }}
@@ -134,7 +150,7 @@ jobs:
           PROBE_OUTCOME: ${{ steps.probe.outcome }}
       - name: Build gallery preview summary
         id: summary
-        if: !cancelled()
+        if: ${{ !cancelled() }}
         run: node scripts/gallery-preview-summary.mjs >> "$GITHUB_OUTPUT"
         env:
           PREVIEW_MODE: ${{ steps.mode.outputs.mode }}
@@ -142,7 +158,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       - name: Find gallery preview comment
         id: find-comment
-        if: !cancelled() && github.actor != 'dependabot[bot]'
+        if: ${{ !cancelled() && github.actor != 'dependabot[bot]' }}
         uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         with:
           issue-number: ${{ github.event.pull_request.number }}
@@ -150,14 +166,14 @@ jobs:
           body-includes: "<!-- launchpad-gallery-preview -->"
       - name: Update gallery preview comment
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
-        if: !cancelled() && github.actor != 'dependabot[bot]'
+        if: ${{ !cancelled() && github.actor != 'dependabot[bot]' }}
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: ${{ steps.summary.outputs.body }}
       - name: Fail if preview deploy or probe failed
-        if: !cancelled() && steps.creds.outputs.ready == 'true' && (steps.preview.outcome != 'success' || steps.probe.outcome == 'failure')
+        if: ${{ !cancelled() && steps.creds.outputs.ready == 'true' && (steps.preview.outcome != 'success' || steps.probe.outcome == 'failure') }}
         run: exit 1
 
   cleanup:

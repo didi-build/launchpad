@@ -18,11 +18,12 @@ Replace this file with your system’s architecture. Keep it short; link to deep
 
 ## Environments
 
-| Environment | Purpose            | Notes                      |
-| ----------- | ------------------ | -------------------------- |
-| local       | Developer machines | `.env` from `.env.example` |
-| staging     | Pre-production     | Fill in when you have one  |
-| production  | Live               | Fill in when you have one  |
+| Environment | Purpose             | Notes                                                    |
+| ----------- | ------------------- | -------------------------------------------------------- |
+| local       | Developer machines  | `.env` from `.env.example`                               |
+| PR preview  | Pull request review | `pr-N` Wrangler Preview Worker (`preview.yml`); optional |
+| staging     | Pre-production      | Fill in when you have one                                |
+| production  | Live                | Fill in when you have one                                |
 
 ## Data flow
 

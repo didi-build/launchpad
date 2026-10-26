@@ -4,11 +4,11 @@ Every Launchpad-derived repo includes a **component gallery**: a `/gallery` rout
 
 ## Who edits what
 
-| Role          | `specs/` (design specs)                                 | `components/` (gallery implementations)                                                     |
-| ------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| **Designer**  | Create and update specs after Diadem approves the spec. | Build or update gallery components from those specs.                                        |
-| **Developer** | No edits                                                | Yes, only for non-design changes: extra props or tiny non-design wiring fixes               |
-| **QA**        | Read specs                                              | Verify gallery components match the approved spec (no second Diadem approval on components) |
+| Role          | `specs/` (design specs)                         | `components/` (gallery implementations)                                                     |
+| ------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Designer**  | Create and update specs (Diadem approves them). | Build or update gallery components from the spec after Diadem approves it.                  |
+| **Developer** | No edits                                        | Yes, only for non-design changes: props or tiny non-design wiring fixes                     |
+| **QA**        | Read specs                                      | Verify gallery components match the approved spec (no second Diadem approval on components) |
 
 The **spec directory is designer-only.** Developers wire components from the gallery into `src/` (or your app tree) and do not change specs.
 
