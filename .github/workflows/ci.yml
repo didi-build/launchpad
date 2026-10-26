@@ -68,15 +68,7 @@ jobs:
         id: workflows
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-          git rev-parse --verify "origin/${BASE_REF}"
-          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
-          if printf '%s\n' "$changed" | grep -q '^\.github/workflows/'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+        run: bash scripts/ci-detect-workflow-file-changes.sh
       - name: Verify action pins
         if: steps.workflows.outputs.run == 'true'
         env:
