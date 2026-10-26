@@ -41,6 +41,7 @@
       "prettier --write"
     ]
   },
+  "//overrides.undici": "Wrangler miniflare still resolves undici 7.29.x; pin 7.30.1 for npm audit fixes until upstream bumps.",
   "overrides": {
     "undici": "7.30.1"
   },
@@ -64,7 +65,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2",
     "vite": "7.3.7",
-    "vitest": "3.2.7",
+    "vitest": "4.1.12",
     "wrangler": "4.152.0",
     "yaml": "2.9.1"
   }
