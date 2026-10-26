@@ -16,12 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      GALLERY_HTML_MARKER: launchpad-component-gallery
     permissions:
       contents: read
       pull-requests: write
       checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Detect preview credentials
         id: creds
         env:
@@ -50,7 +53,7 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: |
           set -euo pipefail
-          output="$(npx wrangler preview --name "pr-${PR_NUMBER}" --json 2>/dev/null)"
+          output="$(npx wrangler preview --name "pr-${PR_NUMBER}" --json)"
           preview_url="$(printf '%s' "$output" | jq -er '.preview.urls[0]')"
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
         env:
@@ -59,7 +62,10 @@ jobs:
       - name: Probe gallery route
         id: probe
         if: steps.creds.outputs.ready == 'true' && steps.preview.outcome == 'success'
-        run: curl --fail --show-error --silent --location "${PREVIEW_URL}/gallery" -o /dev/null
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --show-error --silent --location "${PREVIEW_URL}/gallery")"
+          printf '%s' "$body" | grep -q "${GALLERY_HTML_MARKER}"
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
       - name: Gallery preview check (deployed)
@@ -163,6 +169,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Detect preview credentials
         id: creds
         env:
@@ -185,7 +193,13 @@ jobs:
         run: npm ci
       - name: Delete Preview
         if: steps.creds.outputs.ready == 'true'
-        run: npx wrangler preview delete --name "pr-${PR_NUMBER}" --skip-confirmation >/dev/null
+        run: |
+          set -euo pipefail
+          if npx wrangler preview delete --name "pr-${PR_NUMBER}" --skip-confirmation >/dev/null; then
+            echo "Deleted preview pr-${PR_NUMBER}."
+          else
+            echo "Preview pr-${PR_NUMBER} was not present; nothing to delete."
+          fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PREVIEW }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

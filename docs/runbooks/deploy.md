@@ -7,8 +7,8 @@
 Pull requests from the same repository run [.github/workflows/preview.yml](../../.github/workflows/preview.yml):
 
 1. `npm run build` packages the gallery into `dist/gallery`.
-2. `npx wrangler preview` deploys a named preview Worker (no wrangler stdout in CI logs).
-3. CI comments the preview URL (open `/gallery`) and posts a `gallery-preview` check.
+2. `npx wrangler preview` deploys a named preview Worker for the repo (`launchpad` in the template; project slug after `init-project`). CI captures JSON stdout only; stderr stays in logs without printing secrets.
+3. CI probes `/gallery` for the gallery HTML marker, comments the preview URL, and posts a `gallery-preview` check.
 
 **Repository secrets (names only):** `CLOUDFLARE_API_TOKEN_PREVIEW`, `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because pull request branch code can reach this token. Configure once per repo; same-repo PRs only (fork PRs skip preview).
 

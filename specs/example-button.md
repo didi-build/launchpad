@@ -1,6 +1,6 @@
 # ExampleButton
 
-**Status:** Example spec for Launchpad (not a production design).
+**Status:** Example scaffolding for Launchpad (DIDI-849 pattern demo; not a production design).
 
 ## Purpose
 

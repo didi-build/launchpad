@@ -21,6 +21,7 @@ import {
   formatNodriftMissingError,
   resolveNodriftCli,
 } from "./lib/resolve-nodrift-cli.mjs";
+import { replaceWranglerWorkerName } from "./lib/parse-wrangler-jsonc.mjs";
 
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
@@ -127,7 +128,6 @@ const textFiles = [
   LICENSE_TEMPLATE,
   "AGENTS.md",
   "package.json",
-  "wrangler.jsonc",
   ...listFiles("docs"),
   ...listFiles("specs"),
   ...listFiles("components"),
@@ -153,6 +153,21 @@ pkg.description = purpose;
 pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+const wranglerPath = "wrangler.jsonc";
+if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
+  const wranglerText = readFileSync(wranglerPath, "utf8");
+  try {
+    writeFileSync(
+      wranglerPath,
+      replaceWranglerWorkerName(wranglerText, "launchpad", slug),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    process.exit(1);
+  }
+}
 
 const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];
 for (const file of exampleFiles) {

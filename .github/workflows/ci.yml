@@ -20,6 +20,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
@@ -38,52 +40,7 @@ jobs:
             rm -rf node_modules .git
             npm ci
             npm run init-project -- smoke-test "Smoke Test" "CI template smoke" "$personal_data_flag"
-            node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              if (pkg.description !== 'CI template smoke') {
-                console.error('package.json description mismatch:', pkg.description);
-                process.exit(1);
-              }
-              for (const f of ['src/greet.ts', 'test/greet.test.ts']) {
-                if (fs.existsSync(f)) {
-                  console.error('example file still present:', f);
-                  process.exit(1);
-                }
-              }
-              if (!fs.existsSync('src/.gitkeep')) {
-                console.error('missing src/.gitkeep');
-                process.exit(1);
-              }
-              for (const p of ['specs/example-button.md', 'components/example-button/ExampleButton.tsx', 'gallery/registry.ts']) {
-                if (!fs.existsSync(p)) {
-                  console.error('missing component gallery path:', p);
-                  process.exit(1);
-                }
-              }
-              const wrangler = JSON.parse(
-                fs.readFileSync('wrangler.jsonc', 'utf8')
-                  .replace(/\/\/.*$/gm, '')
-                  .replace(/,(\s*[}\]])/g, function (_match, suffix) { return suffix; }),
-              );
-              if (wrangler.name !== 'smoke-test') {
-                console.error('wrangler.jsonc name mismatch:', wrangler.name);
-                process.exit(1);
-              }
-              if (wrangler.name.includes('{{')) {
-                console.error('wrangler.jsonc still has placeholders');
-                process.exit(1);
-              }
-              const hasNodrift = fs.existsSync('.nodrift/manifest.json');
-              if (process.argv[1] === 'yes' && !hasNodrift) {
-                console.error('expected nodrift manifest after --personal-data');
-                process.exit(1);
-              }
-              if (process.argv[1] === 'no' && hasNodrift) {
-                console.error('unexpected nodrift manifest after --no-personal-data');
-                process.exit(1);
-              }
-            " "$expect_nodrift"
+            node scripts/verify-smoke-init-copy.mjs --slug smoke-test --purpose "CI template smoke" --expect-nodrift "$expect_nodrift"
             npm ci
             npm run check
           }
@@ -100,6 +57,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
@@ -131,6 +89,8 @@ jobs:
       checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc

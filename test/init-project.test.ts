@@ -89,7 +89,7 @@ function seedLaunchpadDir(root: string) {
   );
   writeFileSync(
     join(root, "wrangler.jsonc"),
-    '{"name":"{{PROJECT_SLUG}}","compatibility_date":"2025-10-26"}\n',
+    '{"name":"launchpad","compatibility_date":"2026-10-26"}\n',
   );
 }
 
@@ -142,10 +142,8 @@ describe("init-project (unit)", () => {
     expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
     expect(existsSync(join(dir, "docs/privacy"))).toBe(false);
     const wranglerRaw = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
-    expect(wranglerRaw).not.toContain("{{PROJECT_SLUG}}");
-    const wrangler = JSON.parse(
-      wranglerRaw.replace(/\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
-    ) as { name: string };
+    expect(wranglerRaw).not.toContain('"launchpad"');
+    const wrangler = JSON.parse(wranglerRaw) as { name: string };
     expect(wrangler.name).toBe("my-app");
   });
 
