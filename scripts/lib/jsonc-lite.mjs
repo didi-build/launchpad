@@ -22,7 +22,7 @@ function skipWhitespaceAndComments(text, start) {
   let i = start;
   while (i < text.length) {
     const ch = text[i];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\u00A0") {
       i += 1;
       continue;
     }
@@ -174,6 +174,10 @@ export function jsoncToJsonText(text) {
       const { end } = readJsonString(text, i);
       out += text.slice(i, end);
       i = end;
+      continue;
+    }
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\u00A0") {
+      i += 1;
       continue;
     }
     out += ch;

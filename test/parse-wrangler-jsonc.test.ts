@@ -107,6 +107,16 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
   });
 
+  it("preserves leading whitespace and NBSP before { through rename", () => {
+    const nbsp = "\u00A0";
+    const text = `  ${nbsp}{
+  "name": "launchpad",
+}`;
+    const renamed = replaceWranglerWorkerName(text, "launchpad", "smoke-test");
+    expect(renamed.startsWith(`  ${nbsp}{`)).toBe(true);
+    expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
+  });
+
   it("preserves a mid-string U+FEFF byte for byte through rename", () => {
     const bom = "\uFEFF";
     const text = `{

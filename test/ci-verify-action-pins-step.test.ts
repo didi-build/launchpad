@@ -1,9 +1,9 @@
 import { execSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -25,6 +25,17 @@ function extractWorkflowsDetectRunScript(): string {
 }
 
 const WORKFLOWS_DETECT_RUN = extractWorkflowsDetectRunScript();
+
+const scratchRoots: string[] = [];
+
+afterEach(() => {
+  while (scratchRoots.length > 0) {
+    const root = scratchRoots.pop();
+    if (root) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
 
 function runDetectStep(
   cwd: string,
@@ -74,6 +85,7 @@ function initScratchRepo(): string {
     cwd: root,
     stdio: "pipe",
   });
+  scratchRoots.push(root);
   return root;
 }
 
