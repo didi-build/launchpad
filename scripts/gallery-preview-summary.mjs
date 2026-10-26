@@ -7,9 +7,9 @@ const deployOutcome = process.env.DEPLOY_OUTCOME ?? "unknown";
 let statusLine;
 if (deployOutcome !== "success" || !galleryUrl) {
   statusLine =
-    "❌ **Gallery preview** — deploy did not complete or preview URL is missing (check the workflow log).";
+    "❌ **Gallery preview:** deploy did not complete or preview URL is missing (check the workflow log).";
 } else {
-  statusLine = `✅ **Gallery preview** — [Open /gallery](${galleryUrl})`;
+  statusLine = `✅ **Gallery preview:** [Open /gallery](${galleryUrl})`;
 }
 
 const body = `${marker}
