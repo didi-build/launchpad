@@ -94,6 +94,27 @@ function seedLaunchpadDir(root: string) {
 }
 
 describe("init-project (unit)", () => {
+  it("rejects invalid worker slugs before moving templates", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    let stderr = "";
+    try {
+      execFileSync("node", [initScript, "Bad_Slug", "Bad Slug", "--no-personal-data"], {
+        cwd: dir,
+        encoding: "utf8",
+        env: initEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      const e = err as { stderr?: string; status?: number };
+      stderr = e.stderr ?? "";
+      expect(e.status).toBeGreaterThan(0);
+    }
+    expect(stderr).toMatch(/lowercase letters, digits, and dashes/i);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
+  });
+
   it("does not move templates when args are missing", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);

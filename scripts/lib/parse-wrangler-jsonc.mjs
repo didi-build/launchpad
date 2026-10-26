@@ -1,3 +1,5 @@
+import { stripJsoncLineComments } from "./strip-jsonc-comments.mjs";
+
 /**
  * Parse a minimal wrangler.jsonc file (comments and trailing commas allowed).
  *
@@ -5,7 +7,7 @@
  * @returns {Record<string, unknown>}
  */
 export function parseWranglerJsonc(text) {
-  const withoutComments = text.replace(/\/\/.*$/gm, "");
+  const withoutComments = stripJsoncLineComments(text);
   const withoutTrailingCommas = withoutComments.replace(
     /,(\s*[}\]])/g,
     (_match, suffix) => suffix,

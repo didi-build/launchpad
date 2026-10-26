@@ -22,6 +22,7 @@ import {
   resolveNodriftCli,
 } from "./lib/resolve-nodrift-cli.mjs";
 import { replaceWranglerWorkerName } from "./lib/parse-wrangler-jsonc.mjs";
+import { validateWorkerSlug } from "./lib/worker-slug.mjs";
 
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
@@ -45,6 +46,12 @@ if (!slug || !displayName) {
 
 if (positional.length > 4) {
   console.error("Too many arguments.");
+  process.exit(1);
+}
+
+const slugValidation = validateWorkerSlug(slug);
+if (!slugValidation.ok) {
+  console.error(slugValidation.message);
   process.exit(1);
 }
 
