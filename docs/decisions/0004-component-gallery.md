@@ -12,7 +12,7 @@ New repos from Launchpad need a shared place to build UI from approved specs, pr
 1. **Hosting:** A static React gallery built with Vite and served from a Cloudflare Worker via Wrangler **static assets** (`not_found_handling: single-page-application`). No separate gallery server or Next.js app.
 2. **Worker naming:** The template keeps `"name": "launchpad"` in `wrangler.jsonc` so Launchpad's own previews work. `init-project` renames the Worker to the project slug (same idea as `package.json`), so each derived repo gets its own Worker and `pr-N` previews do not collide across repos.
 3. **Routes:** The gallery SPA lives at `/gallery` (root redirects there). Variants and props come from per-component gallery metadata beside each component.
-4. **Directories:** `specs/` (designer-only) and `components/` (designer + developer for implementation). The gallery UI is driven from `components/` and `gallery/`; each `*.gallery.ts` may import its spec markdown at build time (`?raw`) for display in the gallery only.
+4. **Directories:** `specs/` (designer-only) and `components/` (gallery implementations: Designer builds from the approved spec; Developer edits only for props or tiny non-design wiring fixes). The gallery UI is driven from `components/` and `gallery/`; each `*.gallery.ts` may import its spec markdown at build time (`?raw`) for display in the gallery only.
 5. **PR previews:** `.github/workflows/preview.yml` runs `npx wrangler preview` on same-repo pull requests when `CLOUDFLARE_API_TOKEN_PREVIEW` (Workers Scripts Edit only) and `CLOUDFLARE_ACCOUNT_ID` are set; otherwise the job ends neutral with a single updated PR comment. Deletes the preview when the PR closes.
 
 ## Reasons

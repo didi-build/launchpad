@@ -101,6 +101,19 @@ if (resolved.collects) {
   }
 }
 
+const wranglerPath = "wrangler.jsonc";
+let wranglerRenamed = null;
+if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
+  const wranglerText = readFileSync(wranglerPath, "utf8");
+  try {
+    wranglerRenamed = replaceWranglerWorkerName(wranglerText, "launchpad", slug);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    process.exit(1);
+  }
+}
+
 const purpose =
   purposeArg ??
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
@@ -161,19 +174,8 @@ pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-const wranglerPath = "wrangler.jsonc";
-if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
-  const wranglerText = readFileSync(wranglerPath, "utf8");
-  try {
-    writeFileSync(
-      wranglerPath,
-      replaceWranglerWorkerName(wranglerText, "launchpad", slug),
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(message);
-    process.exit(1);
-  }
+if (wranglerRenamed !== null) {
+  writeFileSync(wranglerPath, wranglerRenamed);
 }
 
 const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];

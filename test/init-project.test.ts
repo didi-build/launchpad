@@ -94,6 +94,20 @@ function seedLaunchpadDir(root: string) {
 }
 
 describe("init-project (unit)", () => {
+  it("leaves templates untouched when wrangler name is not launchpad", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    writeFileSync(
+      join(dir, "wrangler.jsonc"),
+      '{"name":"wrong-name","compatibility_date":"2026-10-26"}\n',
+    );
+    const pkgBefore = readFileSync(join(dir, "package.json"), "utf8");
+    runInitFails(dir, ["my-app", "My App", "--no-personal-data"]);
+    expect(readFileSync(join(dir, "package.json"), "utf8")).toBe(pkgBefore);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
+  });
+
   it("rejects invalid worker slugs before moving templates", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);

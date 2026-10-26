@@ -38,7 +38,9 @@ jobs:
             cp -a "$repo_root" "$tmp/lp"
             cd "$tmp/lp"
             rm -rf node_modules .git
-            npm ci
+            if [ "$expect_nodrift" = "yes" ]; then
+              npm ci
+            fi
             npm run init-project -- smoke-test "Smoke Test" "CI template smoke" "$personal_data_flag"
             node scripts/verify-smoke-init-copy.mjs --slug smoke-test --purpose "CI template smoke" --expect-nodrift "$expect_nodrift"
             npm ci

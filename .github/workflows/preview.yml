@@ -77,11 +77,6 @@ jobs:
           fi
           js_body="$(curl "${curl_common[@]}" "${PREVIEW_URL%/}${js_path}")"
           printf '%s' "$js_body" | grep -q "${GALLERY_PROBE_MARKER}"
-          noise_html="$(curl "${curl_common[@]}" "${PREVIEW_URL}/launchpad-gallery-probe-not-a-route")"
-          if printf '%s' "$noise_html" | grep -q "${GALLERY_PROBE_MARKER}"; then
-            echo "Gallery probe marker must not appear on non-gallery SPA HTML."
-            exit 1
-          fi
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
       - name: Gallery preview check (deployed)

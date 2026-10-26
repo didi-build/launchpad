@@ -41,12 +41,20 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(config.$schema).toBe("https://example.com/path//segment");
   });
 
-  it("does not strip , } inside strings", () => {
+  it('does not strip literal ", }" inside strings', () => {
     const text = `{
   "name": "launchpad",
   "note": "comma, brace } inside"
 }`;
     expect(parseWranglerJsonc(text).note).toBe("comma, brace } inside");
+  });
+
+  it("parses trailing commas inside arrays such as [1, ]", () => {
+    const text = `{
+  "name": "launchpad",
+  "items": [1, ],
+}`;
+    expect(parseWranglerJsonc(text).items).toEqual([1]);
   });
 
   it("handles escaped quotes before line comments", () => {
@@ -55,6 +63,23 @@ describe("parseWranglerJsonc (unit)", () => {
   "hint": "say \\"hello\\" // not a comment"
 }`;
     expect(parseWranglerJsonc(text).hint).toBe('say "hello" // not a comment');
+  });
+
+  it("throws on malformed JSONC instead of ignoring parse errors", () => {
+    const text = `{
+  "name": "launchpad",
+  "broken":
+}`;
+    expect(() => parseWranglerJsonc(text)).toThrow(/parse error/i);
+  });
+
+  it("throws when expectedName does not match top-level name", () => {
+    const text = `{
+  "name": "other",
+}`;
+    expect(() => replaceWranglerWorkerName(text, "launchpad", "smoke-test")).toThrow(
+      /must be "launchpad"/,
+    );
   });
 
   it("renames only the top-level name when a nested name appears first", () => {
@@ -72,13 +97,23 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(renamed).toContain('"name": "smoke-test"');
   });
 
-  it("keeps comments when renaming the worker", () => {
+  it("keeps line comments when renaming the worker", () => {
     const renamed = replaceWranglerWorkerName(
       TEMPLATE_WRANGLER,
       "launchpad",
       "smoke-test",
     );
     expect(renamed).toContain("// Worker display name");
+    expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
+  });
+
+  it("keeps block comments when renaming the worker", () => {
+    const text = `{
+  /* worker id */
+  "name": "launchpad",
+}`;
+    const renamed = replaceWranglerWorkerName(text, "launchpad", "smoke-test");
+    expect(renamed).toContain("/* worker id */");
     expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
   });
 });
