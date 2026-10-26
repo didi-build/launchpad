@@ -107,6 +107,18 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
   });
 
+  it("preserves a mid-string U+FEFF byte for byte through rename", () => {
+    const bom = "\uFEFF";
+    const text = `{
+  "name": "launchpad",
+  "note": "has${bom}bom inside"
+}`;
+    const renamed = replaceWranglerWorkerName(text, "launchpad", "smoke-test");
+    expect(renamed).toContain(`has${bom}bom inside`);
+    expect(renamed.indexOf(bom)).toBe(renamed.indexOf("has") + 3);
+    expect(parseWranglerJsonc(renamed).note).toBe(`has${bom}bom inside`);
+  });
+
   it("parses and renames wrangler.jsonc with a leading UTF-8 BOM (BOM dropped on write)", () => {
     const bom = "\uFEFF";
     const text = `${bom}{

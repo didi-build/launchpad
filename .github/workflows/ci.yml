@@ -68,7 +68,18 @@ jobs:
         id: workflows
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: bash scripts/ci-detect-workflow-file-changes.sh
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify "origin/${BASE_REF}" >/dev/null 2>&1; then
+            echo "::error::origin/${BASE_REF} missing after checkout; verify-action-pins needs actions/checkout fetch-depth: 0. Refusing to skip the pin check."
+            exit 1
+          fi
+          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD" -- .github/workflows/)"
+          if [ -n "$changed" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify action pins
         if: steps.workflows.outputs.run == 'true'
         env:

@@ -4,9 +4,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const DETECT_SCRIPT = join(REPO_ROOT, "scripts/ci-detect-workflow-file-changes.sh");
+
+function extractWorkflowsDetectRunScript(): string {
+  const ciPath = join(REPO_ROOT, ".github/workflows/ci.yml");
+  const ci = parseYaml(readFileSync(ciPath, "utf8")) as {
+    jobs: {
+      "verify-action-pins": {
+        steps: { id?: string; run?: string }[];
+      };
+    };
+  };
+  const step = ci.jobs["verify-action-pins"].steps.find((s) => s.id === "workflows");
+  if (!step?.run) {
+    throw new Error("verify-action-pins workflows step run script not found in ci.yml");
+  }
+  return step.run;
+}
+
+const WORKFLOWS_DETECT_RUN = extractWorkflowsDetectRunScript();
 
 function runDetectStep(
   cwd: string,
@@ -18,7 +36,7 @@ function runDetectStep(
   outputFile: string;
 } {
   const outputPath = join(cwd, "github-output");
-  const result = spawnSync("bash", [DETECT_SCRIPT], {
+  const result = spawnSync("bash", ["-c", WORKFLOWS_DETECT_RUN], {
     cwd,
     encoding: "utf8",
     env: {
@@ -64,8 +82,11 @@ function commitAll(root: string, message: string): void {
   execSync(`git commit -m ${JSON.stringify(message)}`, { cwd: root, stdio: "pipe" });
 }
 
-describe.sequential(
-  "ci-detect-workflow-file-changes.sh (integration)",
+const MISSING_REF_ERROR =
+  "::error::origin/main missing after checkout; verify-action-pins needs actions/checkout fetch-depth: 0. Refusing to skip the pin check.";
+
+describe.skipIf(process.platform === "win32")(
+  "ci.yml verify-action-pins workflows detect run (integration)",
   { timeout: 30_000 },
   () => {
     it("fails with a GitHub error when origin base ref is missing", () => {
@@ -77,9 +98,7 @@ describe.sequential(
 
       const result = runDetectStep(root, "main");
       expect(result.status).toBe(1);
-      expect(`${result.stdout}${result.stderr}`).toContain(
-        "::error::origin/main missing after checkout",
-      );
+      expect(`${result.stdout}${result.stderr}`).toContain(MISSING_REF_ERROR);
       expect(result.outputFile).not.toContain("run=true");
     });
 
@@ -108,11 +127,11 @@ describe.sequential(
       expect(result.outputFile).toContain("run=true");
     });
 
-    it("sets run=true for a workflow change when changed-file list exceeds 64 KiB", () => {
+    it("sets run=true for a workflow change when other changed paths exceed 100 KiB", () => {
       const root = initScratchRepo();
       const padDir = join(root, "padding");
       mkdirSync(padDir, { recursive: true });
-      for (let i = 0; i < 3200; i += 1) {
+      for (let i = 0; i < 5000; i += 1) {
         writeFileSync(join(padDir, `file-${i}.txt`), `${"x".repeat(24)}\n`);
       }
       writeFileSync(
@@ -125,7 +144,7 @@ describe.sequential(
         cwd: root,
         encoding: "utf8",
       });
-      expect(Buffer.byteLength(diffList, "utf8")).toBeGreaterThan(64 * 1024);
+      expect(Buffer.byteLength(diffList, "utf8")).toBeGreaterThan(100 * 1024);
 
       const result = runDetectStep(root, "main");
       expect(result.status).toBe(0);
