@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "launchpad",
+  "name": "{{PROJECT_SLUG}}",
   "compatibility_date": "2025-10-26",
   "assets": {
     "directory": "./dist/gallery",

@@ -127,6 +127,7 @@ const textFiles = [
   LICENSE_TEMPLATE,
   "AGENTS.md",
   "package.json",
+  "wrangler.jsonc",
   ...listFiles("docs"),
   ...listFiles("specs"),
   ...listFiles("components"),

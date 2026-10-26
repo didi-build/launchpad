@@ -12,7 +12,7 @@ if (previewMode === "unconfigured") {
   statusLine = `✅ **Gallery preview:** [Open /gallery](${galleryUrl})`;
 } else if (previewMode === "failed") {
   statusLine =
-    "❌ **Gallery preview:** deploy did not complete (check the workflow log).";
+    "❌ **Gallery preview:** deploy or /gallery probe did not pass (check the workflow log).";
 } else {
   statusLine =
     "❌ **Gallery preview:** unexpected preview state (check the workflow log).";

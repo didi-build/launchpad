@@ -9,16 +9,15 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
+permissions: {}
 
 jobs:
   template-smoke:
     name: template-smoke
     if: github.repository == 'didi-build/launchpad'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -62,6 +61,15 @@ jobs:
                   process.exit(1);
                 }
               }
+              const wrangler = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'));
+              if (wrangler.name !== 'smoke-test') {
+                console.error('wrangler.jsonc name mismatch:', wrangler.name);
+                process.exit(1);
+              }
+              if (wrangler.name.includes('{{')) {
+                console.error('wrangler.jsonc still has placeholders');
+                process.exit(1);
+              }
               const hasNodrift = fs.existsSync('.nodrift/manifest.json');
               if (process.argv[1] === 'yes' && !hasNodrift) {
                 console.error('expected nodrift manifest after --personal-data');
@@ -82,6 +90,8 @@ jobs:
     name: verify-action-pins
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -111,6 +121,10 @@ jobs:
   check:
     name: check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0

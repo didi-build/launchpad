@@ -23,6 +23,15 @@ describe("gallery-preview-summary (unit)", () => {
     expect(body).not.toContain("deploy did not complete");
   });
 
+  it("reports failure when mode is failed", () => {
+    const body = runSummary({
+      PREVIEW_MODE: "failed",
+      PR_HEAD_SHA: "abcdef1234567890",
+    });
+    expect(body).toContain("probe did not pass");
+    expect(body).not.toContain("Open /gallery");
+  });
+
   it("links to /gallery when deployed", () => {
     const body = runSummary({
       PREVIEW_MODE: "deployed",

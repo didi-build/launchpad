@@ -87,6 +87,10 @@ function seedLaunchpadDir(root: string) {
     join(root, "test/greet.test.ts"),
     "import { greet } from '../src/greet.js';\n",
   );
+  writeFileSync(
+    join(root, "wrangler.jsonc"),
+    '{"name":"{{PROJECT_SLUG}}","compatibility_date":"2025-10-26"}\n',
+  );
 }
 
 describe("init-project (unit)", () => {
@@ -137,6 +141,12 @@ describe("init-project (unit)", () => {
     );
     expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
     expect(existsSync(join(dir, "docs/privacy"))).toBe(false);
+    const wranglerRaw = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
+    expect(wranglerRaw).not.toContain("{{PROJECT_SLUG}}");
+    const wrangler = JSON.parse(
+      wranglerRaw.replace(/\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
+    ) as { name: string };
+    expect(wrangler.name).toBe("my-app");
   });
 
   it("does not create nodrift scaffolding with --no-personal-data", () => {
