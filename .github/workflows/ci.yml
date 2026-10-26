@@ -61,7 +61,11 @@ jobs:
                   process.exit(1);
                 }
               }
-              const wrangler = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8').replace(/\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'));
+              const wrangler = JSON.parse(
+                fs.readFileSync('wrangler.jsonc', 'utf8')
+                  .replace(/\/\/.*$/gm, '')
+                  .replace(/,(\s*[}\]])/g, function (_match, suffix) { return suffix; }),
+              );
               if (wrangler.name !== 'smoke-test') {
                 console.error('wrangler.jsonc name mismatch:', wrangler.name);
                 process.exit(1);
