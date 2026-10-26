@@ -9,18 +9,19 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
+permissions: {}
 
 jobs:
   template-smoke:
     name: template-smoke
     if: github.repository == 'didi-build/launchpad'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
@@ -37,35 +38,11 @@ jobs:
             cp -a "$repo_root" "$tmp/lp"
             cd "$tmp/lp"
             rm -rf node_modules .git
-            npm ci
+            if [ "$expect_nodrift" = "yes" ]; then
+              npm ci
+            fi
             npm run init-project -- smoke-test "Smoke Test" "CI template smoke" "$personal_data_flag"
-            node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-              if (pkg.description !== 'CI template smoke') {
-                console.error('package.json description mismatch:', pkg.description);
-                process.exit(1);
-              }
-              for (const f of ['src/greet.ts', 'test/greet.test.ts']) {
-                if (fs.existsSync(f)) {
-                  console.error('example file still present:', f);
-                  process.exit(1);
-                }
-              }
-              if (!fs.existsSync('src/.gitkeep')) {
-                console.error('missing src/.gitkeep');
-                process.exit(1);
-              }
-              const hasNodrift = fs.existsSync('.nodrift/manifest.json');
-              if (process.argv[1] === 'yes' && !hasNodrift) {
-                console.error('expected nodrift manifest after --personal-data');
-                process.exit(1);
-              }
-              if (process.argv[1] === 'no' && hasNodrift) {
-                console.error('unexpected nodrift manifest after --no-personal-data');
-                process.exit(1);
-              }
-            " "$expect_nodrift"
+            node scripts/verify-smoke-init-copy.mjs --slug smoke-test --purpose "CI template smoke" --expect-nodrift "$expect_nodrift"
             npm ci
             npm run check
           }
@@ -76,10 +53,13 @@ jobs:
     name: verify-action-pins
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
@@ -90,7 +70,6 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch origin "$BASE_REF"
           if git diff --name-only "origin/${BASE_REF}...HEAD" | grep -q '^\.github/workflows/'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
@@ -105,8 +84,14 @@ jobs:
   check:
     name: check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc

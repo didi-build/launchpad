@@ -15,27 +15,35 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 ## Layout (template)
 
-| Path                                         | Purpose                                                             |
-| -------------------------------------------- | ------------------------------------------------------------------- |
-| `LICENSE`                                    | MIT license for the Launchpad template                              |
-| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`           |
-| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos) |
-| `README.project.md`                          | Project README template swapped in by `init-project`                |
-| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                 |
-| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                 |
-| `scripts/init-project.mjs`                   | Placeholder replacement and package rename                          |
-| `.github/workflows/bootstrap.yml`            | Auto `init-project` + repo settings on template create / retry      |
-| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                 |
-| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)              |
-| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                              |
+| Path                                         | Purpose                                                                                                               |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `LICENSE`                                    | MIT license for the Launchpad template                                                                                |
+| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`                                                             |
+| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos)                                                   |
+| `README.project.md`                          | Project README template swapped in by `init-project`                                                                  |
+| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                                                                   |
+| `specs/`, `components/`, `gallery/`          | Designer specs, gallery components, and `/gallery` SPA (see [docs/component-gallery.md](./docs/component-gallery.md)) |
+| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                                                                   |
+| `.github/workflows/preview.yml`              | PR gallery preview on Cloudflare Workers (same-repo PRs)                                                              |
+| `scripts/init-project.mjs`                   | Placeholder replacement and package rename                                                                            |
+| `.github/workflows/bootstrap.yml`            | Auto `init-project` + repo settings on template create / retry                                                        |
+| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                                                                   |
+| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)                                                                |
+| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                                                                                |
 
 ## Maintainer commands
 
 ```bash
 npm install
 npm run check        # full gate (template skips placeholder check)
+npm run dev:gallery  # local component gallery (Vite)
+npm run build        # build gallery assets for Workers
 npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
 ```
+
+### PR gallery preview (optional)
+
+Same-repo pull requests run [.github/workflows/preview.yml](./.github/workflows/preview.yml). This template repo deploys previews to the `launchpad` Worker; derived repos use their project slug after `init-project`. To enable previews, add repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because pull request branch code can reach this token. Until secrets exist, the Preview job ends neutral and updates one PR comment that previews are not configured (expected for a new template). Fork PRs skip preview deploy.
 
 ## Contributing to Launchpad
 

@@ -15,4 +15,14 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    files: ["gallery/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.browser,
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+  },
 );

@@ -21,6 +21,8 @@ import {
   formatNodriftMissingError,
   resolveNodriftCli,
 } from "./lib/resolve-nodrift-cli.mjs";
+import { replaceWranglerWorkerName } from "./lib/parse-wrangler-jsonc.mjs";
+import { validateWorkerSlug } from "./lib/worker-slug.mjs";
 
 const README_TEMPLATE = "README.project.md";
 const LICENSE_TEMPLATE = "LICENSE.project";
@@ -44,6 +46,12 @@ if (!slug || !displayName) {
 
 if (positional.length > 4) {
   console.error("Too many arguments.");
+  process.exit(1);
+}
+
+const slugValidation = validateWorkerSlug(slug);
+if (!slugValidation.ok) {
+  console.error(slugValidation.message);
   process.exit(1);
 }
 
@@ -93,6 +101,19 @@ if (resolved.collects) {
   }
 }
 
+const wranglerPath = "wrangler.jsonc";
+let wranglerRenamed = null;
+if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
+  const wranglerText = readFileSync(wranglerPath, "utf8");
+  try {
+    wranglerRenamed = replaceWranglerWorkerName(wranglerText, "launchpad", slug);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    process.exit(1);
+  }
+}
+
 const purpose =
   purposeArg ??
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
@@ -128,6 +149,9 @@ const textFiles = [
   "AGENTS.md",
   "package.json",
   ...listFiles("docs"),
+  ...listFiles("specs"),
+  ...listFiles("components"),
+  ...listFiles("gallery"),
   ...listFiles(".github"),
   ".cursor/rules/launchpad.mdc",
   "CLAUDE.md",
@@ -149,6 +173,10 @@ pkg.description = purpose;
 pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+if (wranglerRenamed !== null) {
+  writeFileSync(wranglerPath, wranglerRenamed);
+}
 
 const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];
 for (const file of exampleFiles) {

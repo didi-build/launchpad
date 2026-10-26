@@ -87,9 +87,53 @@ function seedLaunchpadDir(root: string) {
     join(root, "test/greet.test.ts"),
     "import { greet } from '../src/greet.js';\n",
   );
+  writeFileSync(
+    join(root, "wrangler.jsonc"),
+    '{"name":"launchpad","compatibility_date":"2026-10-26"}\n',
+  );
 }
 
 describe("init-project (unit)", () => {
+  it("leaves templates untouched when wrangler name is not launchpad", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    writeFileSync(
+      join(dir, "wrangler.jsonc"),
+      '{"name":"wrong-name","compatibility_date":"2026-10-26"}\n',
+    );
+    const pkgBefore = readFileSync(join(dir, "package.json"));
+    const readmeBefore = readFileSync(join(dir, "README.project.md"));
+    const licenseBefore = readFileSync(join(dir, "LICENSE.project"));
+    const wranglerBefore = readFileSync(join(dir, "wrangler.jsonc"));
+    runInitFails(dir, ["my-app", "My App", "--no-personal-data"]);
+    expect(readFileSync(join(dir, "package.json"))).toEqual(pkgBefore);
+    expect(readFileSync(join(dir, "README.project.md"))).toEqual(readmeBefore);
+    expect(readFileSync(join(dir, "LICENSE.project"))).toEqual(licenseBefore);
+    expect(readFileSync(join(dir, "wrangler.jsonc"))).toEqual(wranglerBefore);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
+  });
+
+  it("rejects invalid worker slugs before moving templates", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    let stderr = "";
+    try {
+      execFileSync("node", [initScript, "Bad_Slug", "Bad Slug", "--no-personal-data"], {
+        cwd: dir,
+        encoding: "utf8",
+        env: initEnv(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (err) {
+      const e = err as { stderr?: string; status?: number };
+      stderr = e.stderr ?? "";
+      expect(e.status).toBeGreaterThan(0);
+    }
+    expect(stderr).toMatch(/lowercase letters, digits, and dashes/i);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
+  });
+
   it("does not move templates when args are missing", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
@@ -137,6 +181,10 @@ describe("init-project (unit)", () => {
     );
     expect(existsSync(join(dir, ".nodrift/manifest.json"))).toBe(false);
     expect(existsSync(join(dir, "docs/privacy"))).toBe(false);
+    const wranglerRaw = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
+    expect(wranglerRaw).not.toContain('"launchpad"');
+    const wrangler = JSON.parse(wranglerRaw) as { name: string };
+    expect(wrangler.name).toBe("my-app");
   });
 
   it("does not create nodrift scaffolding with --no-personal-data", () => {
