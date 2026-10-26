@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
  * @returns {boolean}
  */
 export function isPreviewMissingError(detail) {
-  return /The Preview "[^"]+" was not found/i.test(detail);
+  return /\/previews\/[^)]+\) failed/.test(detail) && /\[code:\s*10025\]/.test(detail);
 }
 
 /**

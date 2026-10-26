@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           if ! git rev-parse --verify "origin/${BASE_REF}" >/dev/null 2>&1; then
-            echo "::error::origin/${BASE_REF} missing after checkout; verify-action-pins needs actions/checkout fetch-depth: 0. Refusing to skip the pin check."
+            printf '::error::%s\n' "origin/${BASE_REF} missing after checkout; verify-action-pins needs actions/checkout fetch-depth: 0. Refusing to skip the pin check."
             exit 1
           fi
           changed="$(git diff --name-only "origin/${BASE_REF}...HEAD" -- .github/workflows/)"
