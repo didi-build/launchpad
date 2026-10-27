@@ -10,9 +10,15 @@ import {
   findPreviewConfigViolations,
   findProductionTokenReferencesInText,
   findPullRequestWorkflowViolations,
+  findSharedResourceIdViolations,
   findWranglerInvocationViolations,
   workflowOnTriggersPullRequest,
 } from "../scripts/lib/preview-workflow-guard.mjs";
+import {
+  collectWranglerConfigPaths,
+  joinShellContinuationLines,
+  validateWranglerConfigPaths,
+} from "../scripts/lib/wrangler-config-path.mjs";
 import { deletePreviewByName } from "../scripts/lib/wrangler-preview-delete-lib.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -49,6 +55,10 @@ describe("preview-workflow guard (unit)", () => {
   it("detects pull_request triggers from parsed on: keys only", () => {
     expect(workflowOnTriggersPullRequest({ push: { branches: ["main"] } })).toBe(false);
     expect(workflowOnTriggersPullRequest({ pull_request: {} })).toBe(true);
+    expect(workflowOnTriggersPullRequest({ pull_request_review: {} })).toBe(true);
+    expect(workflowOnTriggersPullRequest({ pull_request_review_comment: {} })).toBe(
+      true,
+    );
     expect(workflowOnTriggersPullRequest("pull_request")).toBe(true);
   });
 
@@ -57,9 +67,23 @@ describe("preview-workflow guard (unit)", () => {
       findProductionTokenReferencesInText("token: ${{ secrets.CLOUDFLARE_API_TOKEN }}"),
     ).not.toEqual([]);
     expect(
+      findProductionTokenReferencesInText(
+        "token: ${{ secrets.CLOUDFLARE_API_TOKEN || '' }}",
+      ),
+    ).not.toEqual([]);
+    expect(
+      findProductionTokenReferencesInText("secrets[ 'CLOUDFLARE_API_TOKEN' ]"),
+    ).not.toEqual([]);
+    expect(
       findProductionTokenReferencesInText("secrets['CLOUDFLARE_API_TOKEN']"),
     ).not.toEqual([]);
+    expect(
+      findProductionTokenReferencesInText(
+        "format('{0}', secrets.cloudflare_api_token)",
+      ),
+    ).not.toEqual([]);
     expect(findProductionTokenReferencesInText("toJSON(secrets)")).not.toEqual([]);
+    expect(findProductionTokenReferencesInText("secrets: inherit")).not.toEqual([]);
     expect(
       findProductionTokenReferencesInText(
         "${{ secrets.CLOUDFLARE_API_TOKEN_PREVIEW }}",
@@ -83,6 +107,17 @@ describe("preview-workflow guard regressions (unit)", () => {
     expect(deletePreviewByName("pr-1", { encoding: "utf8", env: process.env })).toBe(1);
     if (prev !== undefined) {
       process.env.WRANGLER_CONFIG = prev;
+    }
+  });
+
+  it("blocks wrangler preview delete when WRANGLER_CONFIG is not wrangler.preview.jsonc", () => {
+    const prev = process.env.WRANGLER_CONFIG;
+    process.env.WRANGLER_CONFIG = "wrangler.jsonc";
+    expect(deletePreviewByName("pr-1", { encoding: "utf8", env: process.env })).toBe(1);
+    if (prev !== undefined) {
+      process.env.WRANGLER_CONFIG = prev;
+    } else {
+      delete process.env.WRANGLER_CONFIG;
     }
   });
 
@@ -221,6 +256,92 @@ describe("preview-workflow guard regressions (unit)", () => {
     const messages = auditMessages(dir);
     expect(messages.some((m) => m.includes("WRANGLER_CONFIG"))).toBe(true);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("preview-workflow guard round 2 bypasses (unit)", () => {
+  function prWorkflow(run: string) {
+    return {
+      on: { pull_request: {} },
+      jobs: { preview: { steps: [{ run }] } },
+      __rawText: "",
+    };
+  }
+
+  it("blocks shell continuation with --worker-name on the next line", () => {
+    const run = `npx wrangler preview \\
+  --worker-name launchpad --name "pr-1"`;
+    const joined = joinShellContinuationLines(run);
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(joined).toContain("--worker-name launchpad");
+    expect(messages.some((m) => m.includes("--worker-name"))).toBe(true);
+  });
+
+  it("blocks a second production config flag after the preview config", () => {
+    const run =
+      "npx wrangler preview -c wrangler.preview.jsonc --config=wrangler.jsonc --name pr-1";
+    expect(
+      validateWranglerConfigPaths(collectWranglerConfigPaths(run)).some((v) =>
+        v.includes("wrangler.jsonc"),
+      ),
+    ).toBe(true);
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.length).toBeGreaterThan(0);
+  });
+
+  it("blocks -c ./wrangler.jsonc", () => {
+    const run = "npx wrangler preview -c ./wrangler.jsonc --name pr-1";
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes("wrangler.jsonc"))).toBe(true);
+  });
+
+  it("blocks secrets: inherit on a reusable workflow call", () => {
+    const workflow = {
+      on: { pull_request: {} },
+      jobs: {
+        call: {
+          uses: "./.github/workflows/other.yml",
+          secrets: "inherit",
+          steps: [],
+        },
+      },
+      __rawText: "",
+    };
+    const messages = findPullRequestWorkflowViolations(
+      workflow,
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes("secrets: inherit"))).toBe(true);
+  });
+
+  it("blocks preview D1 bindings that reuse a production database_id under another name", () => {
+    const production = {
+      d1_databases: [
+        { binding: "DB", database_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+      ],
+    };
+    const preview = {
+      d1_databases: [
+        {
+          binding: "PREVIEW_DB",
+          database_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        },
+      ],
+    };
+    expect(findSharedResourceIdViolations(production, preview)).not.toEqual([]);
   });
 });
 

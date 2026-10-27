@@ -30,6 +30,15 @@ export {
   findWranglerInvocationViolations,
   findPullRequestWorkflowViolations,
   findPreviewConfigViolations,
+  findSharedResourceIdViolations,
+  collectWranglerResourceIds,
   workflowOnTriggersPullRequest,
   REGRESSION_PRE_PR_WRANGLER_PREVIEW_LINE,
 } from "./lib/preview-workflow-guard.mjs";
+
+export {
+  joinShellContinuationLines,
+  collectWranglerConfigPaths,
+  validateWranglerConfigPaths,
+  normalizeWranglerConfigPath,
+} from "./lib/wrangler-config-path.mjs";

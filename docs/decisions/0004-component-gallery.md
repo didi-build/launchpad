@@ -1,6 +1,6 @@
 # 0004. Add a per-repo component gallery on Cloudflare Workers
 
-- **Status:** accepted
+- **Status:** accepted (partially superseded by [0005](./0005-preview-worker-isolation.md))
 - **Date:** 2026-10-26
 
 ## Context

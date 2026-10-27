@@ -2,42 +2,31 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { parseWranglerJsonc } from "./parse-wrangler-jsonc.mjs";
+import {
+  PREVIEW_CONFIG,
+  PRODUCTION_CONFIG,
+  collectWranglerConfigPaths,
+  joinShellContinuationLines,
+  normalizeWranglerConfigPath,
+  validateWranglerConfigPaths,
+} from "./wrangler-config-path.mjs";
 
 export const PREVIEW_WORKFLOW_BASENAME = "preview.yml";
-export const PREVIEW_CONFIG = "wrangler.preview.jsonc";
-export const PRODUCTION_CONFIG = "wrangler.jsonc";
+export { PREVIEW_CONFIG, PRODUCTION_CONFIG };
 export const PREVIEW_WORKFLOWS_DIR = ".github/workflows";
 
-const PREVIEW_CONFIG_FLAG_PATTERN =
-  /(?:^|\s)(?:-c|--config)\s+wrangler\.preview\.jsonc(?:\s|$)/;
+const TO_JSON_SECRETS_PATTERN = /toJSON\s*\(\s*secrets\s*\)/i;
 
-const PRODUCTION_CONFIG_FLAG_PATTERN =
-  /(?:^|\s)(?:-c|--config)\s+wrangler\.jsonc(?:\s|$)/;
+const PRODUCTION_TOKEN_DOT_PATTERN =
+  /secrets\s*\.\s*cloudflare_api_token(?!_preview)\b/i;
 
-const PRODUCTION_TOKEN_DOT_PATTERN = /\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/;
+const PRODUCTION_TOKEN_BRACKET_PATTERN =
+  /secrets\s*\[\s*['"]cloudflare_api_token['"]\s*\]/i;
 
-const PRODUCTION_TOKEN_BRACKET_PATTERN = /secrets\[['"]CLOUDFLARE_API_TOKEN['"]\]/;
+const PRODUCTION_TOKEN_FORMAT_PATTERN =
+  /format\s*\(\s*['"][^'"]*['"]\s*,\s*secrets\s*\.\s*cloudflare_api_token(?!_preview)\b/i;
 
-const TO_JSON_SECRETS_PATTERN = /toJSON\s*\(\s*secrets\s*\)/;
-
-const WRANGLER_BINDING_KEYS = [
-  "ai",
-  "analytics_engine_datasets",
-  "browser",
-  "d1_databases",
-  "dispatch_namespaces",
-  "durable_objects",
-  "hyperdrive",
-  "kv_namespaces",
-  "mtls_certificates",
-  "pipelines",
-  "queues",
-  "r2_buckets",
-  "secrets_store_secrets",
-  "services",
-  "vectorize",
-  "worker_loaders",
-];
+const SECRETS_INHERIT_PATTERN = /\bsecrets\s*:\s*inherit\b/i;
 
 const BLOCKED_WRANGLER_SUBCOMMANDS = new Set([
   "deploy",
@@ -46,6 +35,13 @@ const BLOCKED_WRANGLER_SUBCOMMANDS = new Set([
   "rollback",
   "secret",
   "secrets",
+]);
+
+const PR_TRIGGER_KEYS = new Set([
+  "pull_request",
+  "pull_request_target",
+  "pull_request_review",
+  "pull_request_review_comment",
 ]);
 
 /**
@@ -57,16 +53,13 @@ export function workflowOnTriggersPullRequest(on) {
     return false;
   }
   if (typeof on === "string") {
-    return on === "pull_request" || on === "pull_request_target";
+    return PR_TRIGGER_KEYS.has(on);
   }
   if (Array.isArray(on)) {
     return on.some((entry) => workflowOnTriggersPullRequest(entry));
   }
   if (typeof on === "object") {
-    return (
-      Object.prototype.hasOwnProperty.call(on, "pull_request") ||
-      Object.prototype.hasOwnProperty.call(on, "pull_request_target")
-    );
+    return Object.keys(on).some((key) => PR_TRIGGER_KEYS.has(key));
   }
   return false;
 }
@@ -87,9 +80,19 @@ export function findProductionTokenReferencesInText(text) {
       "references secrets['CLOUDFLARE_API_TOKEN'] (production); use CLOUDFLARE_API_TOKEN_PREVIEW only",
     );
   }
+  if (PRODUCTION_TOKEN_FORMAT_PATTERN.test(text)) {
+    violations.push(
+      "references secrets.CLOUDFLARE_API_TOKEN via format() (production); use CLOUDFLARE_API_TOKEN_PREVIEW only",
+    );
+  }
   if (TO_JSON_SECRETS_PATTERN.test(text)) {
     violations.push(
       "uses toJSON(secrets) in a pull request workflow (can expose production secrets)",
+    );
+  }
+  if (SECRETS_INHERIT_PATTERN.test(text)) {
+    violations.push(
+      "uses secrets: inherit in a pull request workflow (can expose production secrets)",
     );
   }
   return violations;
@@ -118,13 +121,13 @@ function isProductionEnvironment(value) {
  * @param {string} pathLabel
  * @param {string[]} out
  */
-function collectProductionEnvironmentViolations(node, pathLabel, out) {
+function collectPullRequestWorkflowPolicyViolations(node, pathLabel, out) {
   if (node === null || node === undefined || typeof node !== "object") {
     return out;
   }
   if (Array.isArray(node)) {
     for (let i = 0; i < node.length; i += 1) {
-      collectProductionEnvironmentViolations(node[i], `${pathLabel}[${i}]`, out);
+      collectPullRequestWorkflowPolicyViolations(node[i], `${pathLabel}[${i}]`, out);
     }
     return out;
   }
@@ -136,7 +139,14 @@ function collectProductionEnvironmentViolations(node, pathLabel, out) {
     if (key === "environment" && isProductionEnvironment(value)) {
       out.push(`uses environment: production at ${childPath}`);
     }
-    collectProductionEnvironmentViolations(value, childPath, out);
+    if (
+      key === "secrets" &&
+      typeof value === "string" &&
+      value.trim().toLowerCase() === "inherit"
+    ) {
+      out.push(`uses secrets: inherit at ${childPath}`);
+    }
+    collectPullRequestWorkflowPolicyViolations(value, childPath, out);
   }
   return out;
 }
@@ -173,44 +183,38 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
   const violations = [];
   const normalized = invocation.replace(/\s+/g, " ").trim();
 
-  if (!/\bwrangler\b/.test(normalized)) {
+  if (!/\bwrangler\b/i.test(normalized)) {
     return violations;
   }
 
-  if (/--worker-name\s+\S+/.test(normalized)) {
+  if (/--worker-name\s+\S+/i.test(normalized)) {
     violations.push(
       "uses --worker-name (preview must use wrangler.preview.jsonc only)",
     );
   }
 
-  if (PRODUCTION_CONFIG_FLAG_PATTERN.test(normalized)) {
-    violations.push(`uses ${PRODUCTION_CONFIG} as wrangler config`);
-  }
-
   const productionOnly = new RegExp(
     `--worker-name\\s+${productionWorkerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+    "i",
   );
   if (productionOnly.test(normalized)) {
     violations.push(`targets production Worker name ${productionWorkerName}`);
   }
 
   const subcommandMatch = normalized.match(/\bwrangler\s+([a-z][a-z0-9-]*)/i);
-  const subcommand = subcommandMatch?.[1] ?? "";
+  const subcommand = subcommandMatch?.[1]?.toLowerCase() ?? "";
+
+  const configPaths = collectWranglerConfigPaths(normalized);
+  const configViolations = validateWranglerConfigPaths(configPaths);
 
   if (subcommand === "preview") {
-    const isDelete = /\bpreview\s+delete\b/.test(normalized);
-    if (!PREVIEW_CONFIG_FLAG_PATTERN.test(normalized)) {
-      violations.push(
-        isDelete
-          ? "wrangler preview delete must pass -c wrangler.preview.jsonc"
-          : "wrangler preview must pass -c wrangler.preview.jsonc",
-      );
-    }
+    violations.push(...configViolations);
     return violations;
   }
 
   if (BLOCKED_WRANGLER_SUBCOMMANDS.has(subcommand)) {
     violations.push(`forbidden wrangler ${subcommand} in pull request workflow`);
+    violations.push(...configViolations);
     return violations;
   }
 
@@ -218,6 +222,7 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
     violations.push(
       `unexpected wrangler subcommand "${subcommand}" in pull request workflow`,
     );
+    violations.push(...configViolations);
   }
 
   return violations;
@@ -231,11 +236,12 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
  */
 function findRunScriptWranglerViolations(script, productionWorkerName, stepLabel) {
   const violations = [];
-  if (!script || !/\bwrangler\b/.test(script)) {
+  const joined = joinShellContinuationLines(script);
+  if (!joined || !/\bwrangler\b/i.test(joined)) {
     return violations;
   }
-  for (const line of script.split("\n")) {
-    if (!/\bwrangler\b/.test(line)) {
+  for (const line of joined.split("\n")) {
+    if (!/\bwrangler\b/i.test(line)) {
       continue;
     }
     for (const invocation of wranglerTokens(line)) {
@@ -264,7 +270,7 @@ export function findPullRequestWorkflowViolations(
   const raw = workflow.__rawText ?? "";
   const messages = [
     ...findProductionTokenReferencesInText(raw),
-    ...collectProductionEnvironmentViolations(workflow, fileName, []),
+    ...collectPullRequestWorkflowPolicyViolations(workflow, fileName, []),
   ];
 
   const jobs = workflow.jobs;
@@ -295,7 +301,9 @@ export function findPullRequestWorkflowViolations(
           const env = step.env;
           const configValue =
             env && typeof env === "object" ? env.WRANGLER_CONFIG : undefined;
-          if (configValue !== PREVIEW_CONFIG) {
+          if (
+            normalizeWranglerConfigPath(String(configValue ?? "")) !== PREVIEW_CONFIG
+          ) {
             messages.push(
               `${stepLabel}: wrangler-preview-delete.mjs must set env WRANGLER_CONFIG: ${PREVIEW_CONFIG}`,
             );
@@ -305,7 +313,7 @@ export function findPullRequestWorkflowViolations(
       if (
         step.uses &&
         typeof step.uses === "string" &&
-        /\bwrangler\b/.test(step.uses)
+        /\bwrangler\b/i.test(step.uses)
       ) {
         messages.push(`${stepLabel}: must not invoke wrangler via action uses`);
       }
@@ -323,6 +331,156 @@ export function readProductionWorkerName(root) {
   const productionPath = join(root, PRODUCTION_CONFIG);
   const parsed = parseWranglerJsonc(readFileSync(productionPath, "utf8"));
   return String(parsed.name);
+}
+
+/**
+ * @param {Record<string, unknown>} config
+ * @returns {string[]}
+ */
+export function collectWranglerResourceIds(config) {
+  const ids = [];
+  /**
+   * @param {string} kind
+   * @param {unknown} value
+   */
+  const add = (kind, value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const text = String(value).trim();
+    if (text) {
+      ids.push(`${kind}:${text}`);
+    }
+  };
+
+  if (Array.isArray(config.d1_databases)) {
+    for (const entry of config.d1_databases) {
+      if (entry && typeof entry === "object") {
+        add("d1", entry.database_id);
+      }
+    }
+  }
+  if (Array.isArray(config.kv_namespaces)) {
+    for (const entry of config.kv_namespaces) {
+      if (entry && typeof entry === "object") {
+        add("kv", entry.id);
+      }
+    }
+  }
+  if (Array.isArray(config.r2_buckets)) {
+    for (const entry of config.r2_buckets) {
+      if (entry && typeof entry === "object") {
+        add("r2", entry.bucket_name);
+      }
+    }
+  }
+  if (config.queues && typeof config.queues === "object") {
+    for (const listName of ["producers", "consumers"]) {
+      const list = config.queues[listName];
+      if (!Array.isArray(list)) {
+        continue;
+      }
+      for (const entry of list) {
+        if (entry && typeof entry === "object") {
+          add("queue", entry.queue ?? entry.binding);
+        }
+      }
+    }
+  }
+  if (config.durable_objects && typeof config.durable_objects === "object") {
+    const bindings = config.durable_objects.bindings;
+    if (Array.isArray(bindings)) {
+      for (const entry of bindings) {
+        if (entry && typeof entry === "object") {
+          add("do_script", entry.script_name ?? entry.service);
+          add("do_class", entry.class_name);
+        }
+      }
+    }
+  }
+  if (Array.isArray(config.services)) {
+    for (const entry of config.services) {
+      if (entry && typeof entry === "object") {
+        add("service", entry.service);
+      }
+    }
+  }
+  if (Array.isArray(config.hyperdrive)) {
+    for (const entry of config.hyperdrive) {
+      if (entry && typeof entry === "object") {
+        add("hyperdrive", entry.id);
+      }
+    }
+  }
+  if (Array.isArray(config.vectorize)) {
+    for (const entry of config.vectorize) {
+      if (entry && typeof entry === "object") {
+        add("vectorize", entry.index_name);
+      }
+    }
+  }
+  if (Array.isArray(config.analytics_engine_datasets)) {
+    for (const entry of config.analytics_engine_datasets) {
+      if (entry && typeof entry === "object") {
+        add("analytics", entry.dataset);
+      }
+    }
+  }
+  if (Array.isArray(config.dispatch_namespaces)) {
+    for (const entry of config.dispatch_namespaces) {
+      if (entry && typeof entry === "object") {
+        add("dispatch", entry.namespace ?? entry.namespace_id);
+      }
+    }
+  }
+  if (Array.isArray(config.mtls_certificates)) {
+    for (const entry of config.mtls_certificates) {
+      if (entry && typeof entry === "object") {
+        add("mtls", entry.certificate_id);
+      }
+    }
+  }
+  if (Array.isArray(config.secrets_store_secrets)) {
+    for (const entry of config.secrets_store_secrets) {
+      if (entry && typeof entry === "object") {
+        add("secrets_store", `${entry.store_id ?? ""}:${entry.secret_name ?? ""}`);
+      }
+    }
+  }
+  if (Array.isArray(config.pipelines)) {
+    for (const entry of config.pipelines) {
+      if (entry && typeof entry === "object") {
+        add("pipeline", entry.pipeline);
+      }
+    }
+  }
+  if (Array.isArray(config.worker_loaders)) {
+    for (const entry of config.worker_loaders) {
+      if (entry && typeof entry === "object") {
+        add("worker_loader", entry.loader_id ?? entry.name);
+      }
+    }
+  }
+
+  return ids;
+}
+
+/**
+ * @param {Record<string, unknown>} production
+ * @param {Record<string, unknown>} preview
+ * @returns {string[]}
+ */
+export function findSharedResourceIdViolations(production, preview) {
+  const prodIds = new Set(collectWranglerResourceIds(production));
+  const violations = [];
+  for (const id of collectWranglerResourceIds(preview)) {
+    if (prodIds.has(id)) {
+      violations.push(
+        `shared Cloudflare resource ${id} between ${PRODUCTION_CONFIG} and ${PREVIEW_CONFIG}`,
+      );
+    }
+  }
+  return violations;
 }
 
 /**
@@ -360,18 +518,7 @@ export function findPreviewConfigViolations(root) {
     violations.push(`${PREVIEW_CONFIG} must set preview_urls: true`);
   }
 
-  for (const key of WRANGLER_BINDING_KEYS) {
-    const prodValue = production[key];
-    const previewValue = preview[key];
-    if (prodValue === undefined || previewValue === undefined) {
-      continue;
-    }
-    if (JSON.stringify(prodValue) === JSON.stringify(previewValue)) {
-      violations.push(
-        `shared ${key} binding between ${PRODUCTION_CONFIG} and ${PREVIEW_CONFIG}`,
-      );
-    }
-  }
+  violations.push(...findSharedResourceIdViolations(production, preview));
 
   return violations;
 }

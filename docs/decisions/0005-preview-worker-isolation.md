@@ -24,3 +24,15 @@ Project-factory mints `CLOUDFLARE_API_TOKEN_PREVIEW` with scope limited to `<slu
 - Repos need a preview Worker and preview-scoped token before PR gallery deploy succeeds.
 - `init-project` renames both wrangler configs.
 - ADR 0004 remains the gallery feature decision; preview Worker isolation is documented here.
+
+## Guard scope (not a security boundary)
+
+`npm run preview-workflow` catches template regressions in committed GitHub Actions YAML and Wrangler config. The real security boundary is the `<name>-preview`-scoped `CLOUDFLARE_API_TOKEN_PREVIEW` minted by project-factory.
+
+The guard does **not** catch, among other cases:
+
+- Direct `wrangler.js` or non-`npx wrangler` entrypoints
+- A shell variable holding the wrangler command (for example `CMD="wrangler deploy"`)
+- Local composite actions or `github-script` `exec` calls that invoke wrangler
+- `environment:` set by a dynamic expression instead of a static `production` string
+- `--cwd` or `--env` flags that switch config or target Workers outside the parsed command line
