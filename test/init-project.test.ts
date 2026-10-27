@@ -93,7 +93,7 @@ function seedLaunchpadDir(root: string) {
   );
   writeFileSync(
     join(root, "wrangler.preview.jsonc"),
-    '{"name":"launchpad-preview","compatibility_date":"2026-10-26"}\n',
+    '{"name":"launchpad-preview","compatibility_date":"2026-10-26","workers_dev":true,"preview_urls":true}\n',
   );
 }
 

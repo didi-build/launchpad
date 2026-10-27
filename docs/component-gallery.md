@@ -40,4 +40,4 @@ npm run build         # Production asset build (also runs in npm run check)
 
 Same-repo pull requests get a **gallery preview** comment from CI. When repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID` are set, the comment links to `/gallery` on the preview Worker (`launchpad-preview` in the template; `<slug>-preview` after `init-project`). The preview token must be **Workers Scripts Edit** only on that preview Worker; do not grant D1 or R2 Edit because PR-branch code can reach this token. Without those secrets, the Preview job is **neutral** and the comment explains that previews are not configured (expected for a fresh template until you opt in). Fork PRs never run preview deploy.
 
-See [ADR 0004](./decisions/0004-component-gallery.md) for hosting and preview choices.
+See [ADR 0004](./decisions/0004-component-gallery.md) for hosting choices and [ADR 0005](./decisions/0005-preview-worker-isolation.md) for preview Worker isolation.

@@ -122,6 +122,7 @@ if (statSync(wranglerPreviewPath, { throwIfNoEntry: false })?.isFile()) {
       wranglerPreviewText,
       "launchpad-preview",
       `${slug}-preview`,
+      { configLabel: "wrangler.preview.jsonc" },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

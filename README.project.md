@@ -13,18 +13,19 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 
 ## Layout
 
-| Path                                                                                            | Why it exists                                                                                                  |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `LICENSE`                                                                                       | Project license (from `LICENSE.project` at init)                                                               |
-| `LICENSES/launchpad-MIT.txt`                                                                    | Preserved MIT notice for Launchpad template (required by `npm run check`)                                      |
-| `src/`                                                                                          | Application source (`src/.gitkeep` until you add code)                                                         |
-| `specs/`, `components/`, `gallery/`                                                             | Designer specs, gallery UI, and `/gallery` route; see [docs/component-gallery.md](./docs/component-gallery.md) |
-| `test/`                                                                                         | Vitest tests (script and integration tests under `test/`)                                                      |
-| `docs/`                                                                                         | Architecture, decisions, runbooks; see [docs/README.md](./docs/README.md)                                      |
-| `AGENTS.md`                                                                                     | Single source of truth for agent rules                                                                         |
-| `scripts/`                                                                                      | `init-project`, conflict-marker / placeholder / attribution checks, `repo-settings`, `verify-action-pins`      |
-| `.github/workflows/ci.yml`, `preview.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`), PR gallery preview, Dependabot config, and green Dependabot auto-merge                   |
-| `.husky/`                                                                                       | Fast pre-commit checks + secret scan                                                                           |
+| Path                                                                                            | Why it exists                                                                                                            |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `LICENSE`                                                                                       | Project license (from `LICENSE.project` at init)                                                                         |
+| `LICENSES/launchpad-MIT.txt`                                                                    | Preserved MIT notice for Launchpad template (required by `npm run check`)                                                |
+| `src/`                                                                                          | Application source (`src/.gitkeep` until you add code)                                                                   |
+| `specs/`, `components/`, `gallery/`                                                             | Designer specs, gallery UI, and `/gallery` route; see [docs/component-gallery.md](./docs/component-gallery.md)           |
+| `test/`                                                                                         | Vitest tests (script and integration tests under `test/`)                                                                |
+| `docs/`                                                                                         | Architecture, decisions, runbooks; see [docs/README.md](./docs/README.md)                                                |
+| `AGENTS.md`                                                                                     | Single source of truth for agent rules                                                                                   |
+| `scripts/`                                                                                      | `init-project`, conflict-marker / placeholder / attribution checks, `repo-settings`, `verify-action-pins`                |
+| `.github/workflows/ci.yml`, `preview.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`), PR gallery preview, Dependabot config, and green Dependabot auto-merge                             |
+| `wrangler.jsonc`, `wrangler.preview.jsonc`                                                      | Production Worker vs PR preview Worker (`<slug>` and `<slug>-preview`); previews use `CLOUDFLARE_API_TOKEN_PREVIEW` only |
+| `.husky/`                                                                                       | Fast pre-commit checks + secret scan                                                                                     |
 
 ## Commands
 

@@ -25,6 +25,12 @@ export function isPreviewMissingError(detail, previewName) {
  */
 export function deletePreviewByName(name, spawnOptions = {}) {
   const configPath = process.env.WRANGLER_CONFIG;
+  if (!configPath) {
+    console.error(
+      "WRANGLER_CONFIG is required (must point at wrangler.preview.jsonc for preview cleanup).",
+    );
+    return 1;
+  }
   const wranglerArgs = [
     "wrangler",
     "preview",
