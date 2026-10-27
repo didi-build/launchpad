@@ -43,7 +43,7 @@ npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
 
 ### PR gallery preview (optional)
 
-Same-repo pull requests run [.github/workflows/preview.yml](./.github/workflows/preview.yml). This template repo deploys previews to the `launchpad` Worker; derived repos use their project slug after `init-project`. To enable previews, add repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only; do not grant D1 or R2 Edit because pull request branch code can reach this token. Until secrets exist, the Preview job ends neutral and updates one PR comment that previews are not configured (expected for a new template). Fork PRs skip preview deploy.
+Same-repo pull requests run [.github/workflows/preview.yml](./.github/workflows/preview.yml). Previews deploy to a dedicated Worker (`launchpad-preview` in this template; `<slug>-preview` after `init-project`) via `wrangler.preview.jsonc`, not the production Worker in `wrangler.jsonc`. To enable previews, add repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only on the preview Worker; do not grant D1 or R2 Edit because pull request branch code can reach this token. Until secrets exist, the Preview job ends neutral and updates one PR comment that previews are not configured (expected for a new template). Fork PRs skip preview deploy.
 
 ## Contributing to Launchpad
 

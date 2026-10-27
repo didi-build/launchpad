@@ -24,15 +24,23 @@ export function isPreviewMissingError(detail, previewName) {
  * @returns {number}
  */
 export function deletePreviewByName(name, spawnOptions = {}) {
-  const result = spawnSync(
-    "npx",
-    ["wrangler", "preview", "delete", "--name", name, "--skip-confirmation"],
-    {
-      encoding: "utf8",
-      env: process.env,
-      ...spawnOptions,
-    },
-  );
+  const configPath = process.env.WRANGLER_CONFIG;
+  const wranglerArgs = [
+    "wrangler",
+    "preview",
+    "delete",
+    "--name",
+    name,
+    "--skip-confirmation",
+  ];
+  if (configPath) {
+    wranglerArgs.push("-c", configPath);
+  }
+  const result = spawnSync("npx", wranglerArgs, {
+    encoding: "utf8",
+    env: process.env,
+    ...spawnOptions,
+  });
 
   if (result.status === 0) {
     console.log(`Deleted preview ${name}.`);
