@@ -16,19 +16,21 @@ export function parseWranglerJsonc(text) {
  * @param {string} text
  * @param {string} expectedName
  * @param {string} newName
+ * @param {{ configLabel?: string }} [options]
  * @returns {string}
  */
-export function replaceWranglerWorkerName(text, expectedName, newName) {
+export function replaceWranglerWorkerName(text, expectedName, newName, options = {}) {
+  const configLabel = options.configLabel ?? "wrangler.jsonc";
   const parsed = parseWranglerJsonc(text);
   if (parsed.name !== expectedName) {
     throw new Error(
-      `wrangler.jsonc name must be "${expectedName}" before rename (found "${String(parsed.name)}")`,
+      `${configLabel} name must be "${expectedName}" before rename (found "${String(parsed.name)}")`,
     );
   }
   const replaced = replaceTopLevelStringProperty(text, "name", expectedName, newName);
   const after = parseWranglerJsonc(replaced);
   if (after.name !== newName) {
-    throw new Error("wrangler.jsonc name replacement failed");
+    throw new Error(`${configLabel} name replacement failed`);
   }
   return replaced;
 }

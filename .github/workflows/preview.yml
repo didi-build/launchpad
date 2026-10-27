@@ -53,7 +53,7 @@ jobs:
         if: steps.creds.outputs.ready == 'true'
         run: |
           set -euo pipefail
-          output="$(npx wrangler preview --name "pr-${PR_NUMBER}" --json)"
+          output="$(npx wrangler preview -c wrangler.preview.jsonc --name "pr-${PR_NUMBER}" --json)"
           preview_url="$(printf '%s' "$output" | jq -er '.preview.urls[0]')"
           echo "preview_url=$preview_url" >> "$GITHUB_OUTPUT"
         env:
@@ -207,5 +207,6 @@ jobs:
         run: node scripts/wrangler-preview-delete.mjs
         env:
           PREVIEW_NAME: pr-${{ env.PR_NUMBER }}
+          WRANGLER_CONFIG: wrangler.preview.jsonc
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_PREVIEW }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

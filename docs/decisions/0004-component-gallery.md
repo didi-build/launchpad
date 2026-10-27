@@ -1,6 +1,6 @@
 # 0004. Add a per-repo component gallery on Cloudflare Workers
 
-- **Status:** accepted
+- **Status:** accepted (partially superseded by [0005](./0005-preview-worker-isolation.md))
 - **Date:** 2026-10-26
 
 ## Context
@@ -27,3 +27,4 @@ New repos from Launchpad need a shared place to build UI from approved specs, pr
 - `npm run check` includes `npm run build` so the gallery always compiles in CI.
 - Derived repos inherit the same layout; `init-project` keeps `specs/`, `components/`, and `gallery/`.
 - Preview deploy uses preview-scoped repository secret names documented in README and runbooks; missing secrets are a neutral config state for the template.
+- Preview Worker isolation from production is documented in [0005](./0005-preview-worker-isolation.md).

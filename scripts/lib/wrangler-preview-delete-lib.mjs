@@ -1,4 +1,8 @@
 import { spawnSync } from "node:child_process";
+import {
+  PREVIEW_CONFIG,
+  isAllowedPreviewWranglerConfig,
+} from "./wrangler-config-path.mjs";
 
 /**
  * @param {string} detail
@@ -24,15 +28,27 @@ export function isPreviewMissingError(detail, previewName) {
  * @returns {number}
  */
 export function deletePreviewByName(name, spawnOptions = {}) {
-  const result = spawnSync(
-    "npx",
-    ["wrangler", "preview", "delete", "--name", name, "--skip-confirmation"],
-    {
-      encoding: "utf8",
-      env: process.env,
-      ...spawnOptions,
-    },
-  );
+  const configPath = process.env.WRANGLER_CONFIG;
+  if (!isAllowedPreviewWranglerConfig(configPath)) {
+    console.error(
+      `WRANGLER_CONFIG must be ${PREVIEW_CONFIG} for preview cleanup (found "${configPath ?? ""}").`,
+    );
+    return 1;
+  }
+  const wranglerArgs = [
+    "wrangler",
+    "preview",
+    "delete",
+    "--name",
+    name,
+    "--skip-confirmation",
+  ];
+  wranglerArgs.push("-c", PREVIEW_CONFIG);
+  const result = spawnSync("npx", wranglerArgs, {
+    encoding: "utf8",
+    env: process.env,
+    ...spawnOptions,
+  });
 
   if (result.status === 0) {
     console.log(`Deleted preview ${name}.`);
