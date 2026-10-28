@@ -168,6 +168,7 @@ export function jsoncToJsonText(text) {
         i += 1;
       }
       i += 2;
+      out += " ";
       continue;
     }
     if (ch === '"') {
