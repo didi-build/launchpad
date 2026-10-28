@@ -40,8 +40,9 @@ export function App() {
       <header className="gallery-header">
         <h1>Component gallery</h1>
         <p className="gallery-muted">
-          Specs live in <code>specs/</code>; implementations in <code>components/</code>
-          . See <code>docs/component-gallery.md</code>.
+          Specs live in <code>design/&lt;area&gt;/&lt;feature&gt;/</code>;
+          implementations in <code>components/</code>. See{" "}
+          <code>docs/component-gallery.md</code>.
         </p>
       </header>
       <main className="gallery-main">

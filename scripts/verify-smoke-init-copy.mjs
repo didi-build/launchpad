@@ -45,7 +45,7 @@ if (!existsSync("src/.gitkeep")) {
 }
 
 for (const path of [
-  "specs/example-button.md",
+  "design/gallery/example-button/spec.md",
   "components/example-button/ExampleButton.tsx",
   "gallery/registry.ts",
 ]) {
