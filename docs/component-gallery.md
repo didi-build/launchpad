@@ -12,6 +12,8 @@ Every Launchpad-derived repo includes a **component gallery**: a `/gallery` rout
 
 The **spec directory is designer-only.** Developers wire components from the gallery into `src/` (or your app tree) and do not change specs.
 
+For Linear status names and handoffs (design ticket, developer counterpart, Diadem approval, QA), see [Design ticket flow](./design-workflow.md).
+
 ## Directories
 
 | Path          | Purpose                                                                     |
