@@ -20,4 +20,13 @@ Statuses below match Linear exactly. Move tickets through them in order.
 
 Row 6 is two Linear statuses in sequence: **Ready for review**, then **In QA Review**.
 
+### Spec and gallery pull requests
+
+Spec files stay under `specs/` (see [component gallery](./component-gallery.md#directories); not `design/<area>/<feature>/`, which is tracked separately as DIDI-944).
+
+- **(a)** Gallery work is a separate PR from the spec PR. QA reviews it against the spec at row 6 and merges it on green CI.
+- **(b)** Merging the gallery PR moves the design ticket to **Done** and unblocks the developer counterpart ticket. Merging the spec PR at row 4 does not close the design ticket.
+- **(c)** When a design needs no gallery change (a copy-only spec), skip rows 5 and 6. The ticket goes **Done** when the spec PR merges.
+- **(d)** This v2 flow (approved by Diadem Oct 25, 2026, 10:50 PM ET on [DIDI-848](https://linear.app/didi-build/issue/DIDI-848)) replaces the earlier Oct 22 rule on when the design ticket goes **Done**.
+
 Related: [component gallery](./component-gallery.md) directories, local dev, and previews. Decision record: [ADR 0004](./decisions/0004-component-gallery.md).
