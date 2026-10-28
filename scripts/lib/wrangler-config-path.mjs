@@ -68,7 +68,7 @@ export function collectWranglerConfigPaths(commandText) {
   const paths = [];
   const text = commandText.replace(/\s+/g, " ");
   let match;
-  const eqRe = /--config=([^\s]+)/gi;
+  const eqRe = /(?:--config|-c)=([^\s]+)/gi;
   while ((match = eqRe.exec(text)) !== null) {
     paths.push(match[1]);
   }

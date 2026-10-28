@@ -157,7 +157,7 @@ function collectPullRequestWorkflowPolicyViolations(node, pathLabel, out) {
  */
 function wranglerTokens(commandLine) {
   const tokens = [];
-  const re = /\b(?:npx\s+)?wrangler\b/g;
+  const re = /\b(?:(?:npx|bunx)\s+)?wrangler(?:@[^\s/]+)?\b/gi;
   let match = re.exec(commandLine);
   while (match) {
     const start = match.index;
@@ -201,7 +201,9 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
     violations.push(`targets production Worker name ${productionWorkerName}`);
   }
 
-  const subcommandMatch = normalized.match(/\bwrangler\s+([a-z][a-z0-9-]*)/i);
+  const subcommandMatch = normalized.match(
+    /\bwrangler(?:@[^\s/]+)?\s+([a-z][a-z0-9-]*)/i,
+  );
   const subcommand = subcommandMatch?.[1]?.toLowerCase() ?? "";
 
   const configPaths = collectWranglerConfigPaths(normalized);
@@ -357,6 +359,7 @@ export function collectWranglerResourceIds(config) {
     for (const entry of config.d1_databases) {
       if (entry && typeof entry === "object") {
         add("d1", entry.database_id);
+        add("d1_preview", entry.preview_database_id);
       }
     }
   }
@@ -364,6 +367,7 @@ export function collectWranglerResourceIds(config) {
     for (const entry of config.kv_namespaces) {
       if (entry && typeof entry === "object") {
         add("kv", entry.id);
+        add("kv_preview", entry.preview_id);
       }
     }
   }
@@ -466,6 +470,72 @@ export function collectWranglerResourceIds(config) {
 }
 
 /**
+ * @param {Record<string, unknown>} preview
+ * @returns {string[]}
+ */
+export function findPreviewD1BindingViolations(preview) {
+  const violations = [];
+  if (!Array.isArray(preview.d1_databases)) {
+    return violations;
+  }
+  for (const entry of preview.d1_databases) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const name =
+      entry.database_name !== undefined && entry.database_name !== null
+        ? String(entry.database_name).trim()
+        : "";
+    const id =
+      entry.database_id !== undefined && entry.database_id !== null
+        ? String(entry.database_id).trim()
+        : "";
+    if (name && !id) {
+      violations.push(
+        `${PREVIEW_CONFIG} d1_databases entry "${name}" has database_name but no database_id`,
+      );
+    }
+  }
+  return violations;
+}
+
+/**
+ * @param {Record<string, unknown>} preview
+ * @param {string} productionWorkerName
+ * @returns {string[]}
+ */
+export function findPreviewIsolationViolations(preview, productionWorkerName) {
+  const violations = [];
+
+  if (Array.isArray(preview.services)) {
+    for (const entry of preview.services) {
+      if (entry && typeof entry === "object") {
+        const service = entry.service;
+        if (typeof service === "string" && service.trim() === productionWorkerName) {
+          violations.push(
+            `${PREVIEW_CONFIG} service binding targets production Worker "${productionWorkerName}"`,
+          );
+        }
+      }
+    }
+  }
+
+  if (preview.routes !== undefined && preview.routes !== null) {
+    violations.push(`${PREVIEW_CONFIG} must not define routes (production routing)`);
+  }
+  if (preview.route !== undefined && preview.route !== null) {
+    violations.push(`${PREVIEW_CONFIG} must not define route (production routing)`);
+  }
+  if (preview.custom_domains !== undefined && preview.custom_domains !== null) {
+    violations.push(
+      `${PREVIEW_CONFIG} must not define custom_domains (production routing)`,
+    );
+  }
+
+  return violations;
+}
+
+/**
  * @param {Record<string, unknown>} production
  * @param {Record<string, unknown>} preview
  * @returns {string[]}
@@ -519,6 +589,8 @@ export function findPreviewConfigViolations(root) {
   }
 
   violations.push(...findSharedResourceIdViolations(production, preview));
+  violations.push(...findPreviewD1BindingViolations(preview));
+  violations.push(...findPreviewIsolationViolations(preview, productionName));
 
   return violations;
 }

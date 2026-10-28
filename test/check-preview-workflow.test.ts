@@ -8,6 +8,8 @@ import { auditPreviewRepository } from "../scripts/check-preview-workflow.mjs";
 import {
   REGRESSION_PRE_PR_WRANGLER_PREVIEW_LINE,
   findPreviewConfigViolations,
+  findPreviewD1BindingViolations,
+  findPreviewIsolationViolations,
   findProductionTokenReferencesInText,
   findPullRequestWorkflowViolations,
   findSharedResourceIdViolations,
@@ -342,6 +344,144 @@ describe("preview-workflow guard round 2 bypasses (unit)", () => {
       ],
     };
     expect(findSharedResourceIdViolations(production, preview)).not.toEqual([]);
+  });
+});
+
+describe("preview-workflow guard DIDI-915 (unit)", () => {
+  function prWorkflow(run: string) {
+    return {
+      on: { pull_request: {} },
+      jobs: { preview: { steps: [{ run }] } },
+      __rawText: "",
+    };
+  }
+
+  it("blocks npx wrangler@4.152.0 preview with no -c", () => {
+    const violations = findWranglerInvocationViolations(
+      "npx wrangler@4.152.0 preview --name pr-1",
+      "launchpad",
+    );
+    expect(violations.some((v) => v.includes("wrangler.preview.jsonc"))).toBe(true);
+  });
+
+  it("blocks npx wrangler@latest preview -c wrangler.jsonc", () => {
+    const violations = findWranglerInvocationViolations(
+      "npx wrangler@latest preview -c wrangler.jsonc --name pr-1",
+      "launchpad",
+    );
+    expect(violations.some((v) => v.includes("wrangler.jsonc"))).toBe(true);
+  });
+
+  it("blocks bunx wrangler@latest deploy", () => {
+    const violations = findWranglerInvocationViolations(
+      "bunx wrangler@latest deploy",
+      "launchpad",
+    );
+    expect(violations.some((v) => v.includes("forbidden wrangler deploy"))).toBe(true);
+  });
+
+  it("allows -c=wrangler.preview.jsonc on wrangler preview", () => {
+    const run = "npx wrangler preview -c=wrangler.preview.jsonc --name pr-1";
+    expect(validateWranglerConfigPaths(collectWranglerConfigPaths(run))).toEqual([]);
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages).toEqual([]);
+  });
+
+  it("blocks -c wrangler.preview.jsonc together with -c=wrangler.jsonc", () => {
+    const run =
+      "npx wrangler preview -c wrangler.preview.jsonc -c=wrangler.jsonc --name pr-1";
+    expect(
+      validateWranglerConfigPaths(collectWranglerConfigPaths(run)).some((v) =>
+        v.includes("wrangler.jsonc"),
+      ),
+    ).toBe(true);
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.length).toBeGreaterThan(0);
+  });
+
+  it("blocks preview D1 preview_database_id shared with production", () => {
+    const production = {
+      d1_databases: [
+        {
+          binding: "DB",
+          database_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          preview_database_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        },
+      ],
+    };
+    const preview = {
+      d1_databases: [
+        {
+          binding: "PREVIEW_DB",
+          database_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+          preview_database_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        },
+      ],
+    };
+    expect(findSharedResourceIdViolations(production, preview)).not.toEqual([]);
+  });
+
+  it("blocks preview KV preview_id shared with production", () => {
+    const production = {
+      kv_namespaces: [
+        {
+          binding: "KV",
+          id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          preview_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        },
+      ],
+    };
+    const preview = {
+      kv_namespaces: [
+        {
+          binding: "PREVIEW_KV",
+          id: "cccccccccccccccccccccccccccccccc",
+          preview_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        },
+      ],
+    };
+    expect(findSharedResourceIdViolations(production, preview)).not.toEqual([]);
+  });
+
+  it("fails when preview D1 has database_name but no database_id", () => {
+    const preview = {
+      d1_databases: [{ binding: "DB", database_name: "my-db" }],
+    };
+    expect(findPreviewD1BindingViolations(preview).length).toBeGreaterThan(0);
+  });
+
+  it("fails when preview config service binding targets production Worker", () => {
+    const violations = findPreviewIsolationViolations(
+      { services: [{ binding: "API", service: "launchpad" }] },
+      "launchpad",
+    );
+    expect(violations.some((v) => v.includes("production Worker"))).toBe(true);
+  });
+
+  it("fails when preview config defines routes", () => {
+    expect(
+      findPreviewIsolationViolations({ routes: [{ pattern: "example.com/*" }] }, "x"),
+    ).not.toEqual([]);
+  });
+
+  it("fails when preview config defines route", () => {
+    expect(
+      findPreviewIsolationViolations({ route: { pattern: "example.com/*" } }, "x"),
+    ).not.toEqual([]);
+  });
+
+  it("fails when preview config defines custom_domains", () => {
+    expect(
+      findPreviewIsolationViolations({ custom_domains: ["preview.example.com"] }, "x"),
+    ).not.toEqual([]);
   });
 });
 
