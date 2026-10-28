@@ -21,6 +21,7 @@ import {
   joinShellContinuationLines,
   validateWranglerConfigPaths,
 } from "../scripts/lib/wrangler-config-path.mjs";
+import { parseWranglerInvocation } from "../scripts/lib/wrangler-invocation-parse.mjs";
 import { deletePreviewByName } from "../scripts/lib/wrangler-preview-delete-lib.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -51,6 +52,30 @@ function seedRepo(dir: string) {
 
 function auditMessages(dir: string) {
   return auditPreviewRepository(dir).flatMap((entry) => entry.messages);
+}
+
+function withPreviewFixture(
+  previewExtra: Record<string, unknown>,
+  prodExtra: Record<string, unknown> = {},
+) {
+  const dir = mkdtempSync(join(tmpdir(), "preview-wf-fixture-"));
+  const prod = {
+    name: "launchpad",
+    compatibility_date: "2026-10-26",
+    ...prodExtra,
+  };
+  const preview = {
+    name: "launchpad-preview",
+    compatibility_date: "2026-10-26",
+    workers_dev: true,
+    preview_urls: true,
+    ...previewExtra,
+  };
+  writeFileSync(join(dir, "wrangler.jsonc"), `${JSON.stringify(prod)}\n`);
+  writeFileSync(join(dir, "wrangler.preview.jsonc"), `${JSON.stringify(preview)}\n`);
+  const messages = findPreviewConfigViolations(dir);
+  rmSync(dir, { recursive: true, force: true });
+  return messages;
 }
 
 describe("preview-workflow guard (unit)", () => {
@@ -482,6 +507,150 @@ describe("preview-workflow guard DIDI-915 (unit)", () => {
     expect(
       findPreviewIsolationViolations({ custom_domains: ["preview.example.com"] }, "x"),
     ).not.toEqual([]);
+  });
+});
+
+describe("preview-workflow guard DIDI-915 QA round 2 (unit)", () => {
+  function prWorkflow(run: string) {
+    return {
+      on: { pull_request: {} },
+      jobs: { preview: { steps: [{ run }] } },
+      __rawText: "",
+    };
+  }
+
+  it("rejects two non-production config paths", () => {
+    const eqForm =
+      "npx wrangler preview -c=wrangler.preview.jsonc -c other.jsonc --name pr-1";
+    const spacedForm =
+      "npx wrangler preview -c wrangler.preview.jsonc --config wrangler.preview.jsonc --name pr-1";
+    for (const run of [eqForm, spacedForm]) {
+      const violations = validateWranglerConfigPaths(collectWranglerConfigPaths(run));
+      expect(violations.some((v) => v.includes("exactly one config path"))).toBe(true);
+    }
+  });
+
+  it("findPreviewConfigViolations fails for D1 database_name without database_id (fixture)", () => {
+    const messages = withPreviewFixture({
+      d1_databases: [{ binding: "DB", database_name: "my-db" }],
+    });
+    expect(messages.some((m) => m.includes("database_name but no database_id"))).toBe(
+      true,
+    );
+  });
+
+  it("findPreviewConfigViolations fails for prod service binding (fixture)", () => {
+    const messages = withPreviewFixture({
+      services: [{ binding: "API", service: "launchpad" }],
+    });
+    expect(messages.some((m) => m.includes("production Worker"))).toBe(true);
+  });
+
+  it("findPreviewConfigViolations fails for routes, route and custom_domains (fixture)", () => {
+    for (const extra of [
+      { routes: [{ pattern: "example.com/*" }] },
+      { route: { pattern: "example.com/*" } },
+      { custom_domains: ["x.example.com"] },
+    ]) {
+      const messages = withPreviewFixture(extra);
+      expect(messages.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("findPreviewConfigViolations fails for prod bindings under env blocks (fixture)", () => {
+    const messages = withPreviewFixture({
+      env: {
+        staging: {
+          services: [{ binding: "API", service: "launchpad" }],
+          routes: [{ pattern: "example.com/*" }],
+        },
+      },
+    });
+    expect(messages.some((m) => m.includes("env.staging"))).toBe(true);
+  });
+
+  it("detects cross-field D1 id sharing between database_id and preview_database_id", () => {
+    const shared = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const production = {
+      d1_databases: [{ binding: "DB", database_id: shared }],
+    };
+    const preview = {
+      d1_databases: [{ binding: "P", preview_database_id: shared }],
+    };
+    expect(findSharedResourceIdViolations(production, preview)).not.toEqual([]);
+    const reverse = findSharedResourceIdViolations(
+      { d1_databases: [{ preview_database_id: shared }] },
+      { d1_databases: [{ database_id: shared }] },
+    );
+    expect(reverse).not.toEqual([]);
+  });
+
+  it("detects cross-field KV id sharing between id and preview_id", () => {
+    const shared = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    expect(
+      findSharedResourceIdViolations(
+        { kv_namespaces: [{ binding: "KV", id: shared }] },
+        { kv_namespaces: [{ binding: "P", preview_id: shared }] },
+      ),
+    ).not.toEqual([]);
+  });
+
+  it("blocks flags-before-subcommand deploy and env selection bypasses", () => {
+    const cases = [
+      "npx wrangler -c wrangler.jsonc deploy",
+      "npx wrangler --config wrangler.preview.jsonc deploy",
+      "npx wrangler --cwd . deploy",
+      "wrangler -e production deploy",
+      "npm exec wrangler -- deploy",
+      "CLOUDFLARE_ENV=production npx wrangler preview -c wrangler.preview.jsonc",
+    ];
+    for (const run of cases) {
+      const direct = findWranglerInvocationViolations(run, "launchpad");
+      const workflow = findPullRequestWorkflowViolations(
+        prWorkflow(run),
+        "preview.yml",
+        "launchpad",
+      );
+      expect(direct.length + workflow.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("parseWranglerInvocation skips flags before the subcommand", () => {
+    expect(
+      parseWranglerInvocation("npx wrangler -c wrangler.jsonc deploy").subcommand,
+    ).toBe("deploy");
+    expect(parseWranglerInvocation("wrangler --cwd . deploy").subcommand).toBe(
+      "deploy",
+    );
+  });
+
+  it("blocks quoted wrangler and shell continuation without space before backslash", () => {
+    expect(
+      findWranglerInvocationViolations('npx "wrangler" deploy', "launchpad").length,
+    ).toBeGreaterThan(0);
+    const run = `npx wrangler\\
+  deploy`;
+    const joined = joinShellContinuationLines(run);
+    expect(joined).toBe("npx wrangler deploy");
+    const messages = findPullRequestWorkflowViolations(
+      prWorkflow(run),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes("forbidden wrangler deploy"))).toBe(true);
+  });
+
+  it("findPreviewConfigViolations catches minor isolation gaps (fixture)", () => {
+    const emptyD1 = withPreviewFixture({ d1_databases: [{}] });
+    expect(emptyD1.some((m) => m.includes("empty"))).toBe(true);
+    const caseService = withPreviewFixture({
+      services: [{ binding: "API", service: "Launchpad" }],
+    });
+    expect(caseService.some((m) => m.includes("production Worker"))).toBe(true);
+    const tail = withPreviewFixture({
+      tail_consumers: [{ service: "launchpad" }],
+    });
+    expect(tail.some((m) => m.includes("tail_consumers"))).toBe(true);
   });
 });
 

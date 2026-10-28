@@ -43,12 +43,16 @@ export function joinShellContinuationLines(script) {
   let current = "";
   for (const line of physical) {
     if (current) {
-      current += line.replace(/^\s*/, "");
+      const next = line.replace(/^\s*/, "");
+      if (current && !/\s$/.test(current) && next.length > 0) {
+        current += " ";
+      }
+      current += next;
     } else {
       current = line;
     }
     if (current.endsWith("\\")) {
-      current = current.slice(0, -1);
+      current = current.slice(0, -1).replace(/\s+$/, "");
       continue;
     }
     merged.push(current);

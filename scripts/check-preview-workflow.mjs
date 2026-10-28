@@ -30,8 +30,13 @@ export {
   findWranglerInvocationViolations,
   findPullRequestWorkflowViolations,
   findPreviewConfigViolations,
+  findPreviewD1BindingViolations,
+  findPreviewEnvBlockViolations,
+  findPreviewIsolationViolations,
   findSharedResourceIdViolations,
   collectWranglerResourceIds,
+  collectD1IdSet,
+  collectKvIdSet,
   workflowOnTriggersPullRequest,
   REGRESSION_PRE_PR_WRANGLER_PREVIEW_LINE,
 } from "./lib/preview-workflow-guard.mjs";
