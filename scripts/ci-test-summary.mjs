@@ -9,7 +9,7 @@ const lines = [];
 
 if (installOutcome !== "success") {
   lines.push(
-    `❌ **npm ci** — \`${installOutcome}\` (dependency install failed; tests and check did not run)`,
+    `❌ **npm ci** - \`${installOutcome}\` (dependency install failed; tests and check did not run)`,
   );
   lines.push(
     "_Common on major Dependabot bumps: peer dependency conflicts. Review the workflow log for the npm ci step._",
@@ -25,13 +25,13 @@ if (installOutcome !== "success") {
     const failed = failures + errors;
     const passed = Math.max(0, tests - failed);
     const icon = failed === 0 ? "✅" : "❌";
-    testLine = `${icon} **Vitest** — ${passed}/${tests} passed (${failed} failed)`;
+    testLine = `${icon} **Vitest** - ${passed}/${tests} passed (${failed} failed)`;
   }
   lines.push(testLine);
 
   const checkIcon = checkOutcome === "success" ? "✅" : "❌";
   lines.push(
-    `${checkIcon} **check** — \`${checkOutcome}\` (format, lint, typecheck, test, secrets, secret-usage, preview-workflow, placeholders, attribution)`,
+    `${checkIcon} **check** - \`${checkOutcome}\` (format, lint, typecheck, test, secrets, secret-usage, preview-workflow, placeholders, attribution)`,
   );
 }
 

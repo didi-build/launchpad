@@ -43,12 +43,16 @@ export function joinShellContinuationLines(script) {
   let current = "";
   for (const line of physical) {
     if (current) {
-      current += line.replace(/^\s*/, "");
+      const next = line.replace(/^\s*/, "");
+      if (current && !/\s$/.test(current) && next.length > 0) {
+        current += " ";
+      }
+      current += next;
     } else {
       current = line;
     }
     if (current.endsWith("\\")) {
-      current = current.slice(0, -1);
+      current = current.slice(0, -1).replace(/\s+$/, "");
       continue;
     }
     merged.push(current);
@@ -68,7 +72,7 @@ export function collectWranglerConfigPaths(commandText) {
   const paths = [];
   const text = commandText.replace(/\s+/g, " ");
   let match;
-  const eqRe = /--config=([^\s]+)/gi;
+  const eqRe = /(?:--config|-c)=([^\s]+)/gi;
   while ((match = eqRe.exec(text)) !== null) {
     paths.push(match[1]);
   }

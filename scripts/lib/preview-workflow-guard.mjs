@@ -10,6 +10,28 @@ import {
   normalizeWranglerConfigPath,
   validateWranglerConfigPaths,
 } from "./wrangler-config-path.mjs";
+import {
+  extractWranglerInvocations,
+  lineMentionsWrangler,
+  parseCloudflareEnvAssignments,
+  parseWranglerInvocation,
+  scriptRunsWranglerPreview,
+} from "./wrangler-invocation-parse.mjs";
+
+export const MSG_PREVIEW_ENV_SELECTION =
+  "uses wrangler environment selection on preview (forbidden -e/--env and CLOUDFLARE_ENV on preview)";
+export const MSG_PREVIEW_CLOUDFLARE_ENV =
+  "uses CLOUDFLARE_ENV on preview invocation (forbidden)";
+export const MSG_PRODUCTION_ENV_FLAG =
+  "uses wrangler -e/--env production (preview must not target production)";
+export const MSG_PRODUCTION_CLOUDFLARE_ENV =
+  "uses CLOUDFLARE_ENV=production (preview must not target production)";
+export const MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW =
+  "uses CLOUDFLARE_ENV in workflow env on preview invocation (forbidden)";
+export const MSG_NO_SUBCOMMAND =
+  "wrangler invocation has no recognizable subcommand after flags";
+export const MSG_PREVIEW_CONFIG_ENV_KEY =
+  "must not define env (use top-level preview config only)";
 
 export const PREVIEW_WORKFLOW_BASENAME = "preview.yml";
 export { PREVIEW_CONFIG, PRODUCTION_CONFIG };
@@ -152,26 +174,51 @@ function collectPullRequestWorkflowPolicyViolations(node, pathLabel, out) {
 }
 
 /**
- * @param {string} commandLine
+ * @param {string} envName
+ * @returns {boolean}
+ */
+function isProductionEnvName(envName) {
+  return envName.trim().toLowerCase() === "production";
+}
+
+/**
+ * @param {string[]} envNames
+ * @param {string[]} cloudflareEnvValues
+ * @param {string} subcommand
  * @returns {string[]}
  */
-function wranglerTokens(commandLine) {
-  const tokens = [];
-  const re = /\b(?:npx\s+)?wrangler\b/g;
-  let match = re.exec(commandLine);
-  while (match) {
-    const start = match.index;
-    let end = commandLine.length;
-    const tail = commandLine.slice(start);
-    const segmentEnd = tail.search(/[;&|]/);
-    if (segmentEnd !== -1) {
-      end = start + segmentEnd;
+export function findWranglerEnvSelectionViolations(
+  envNames,
+  cloudflareEnvValues,
+  subcommand,
+) {
+  const violations = [];
+  const isPreview = subcommand === "preview";
+
+  for (const value of cloudflareEnvValues) {
+    if (!value) {
+      continue;
     }
-    tokens.push(commandLine.slice(start, end).trim());
-    re.lastIndex = end;
-    match = re.exec(commandLine);
+    if (isPreview) {
+      violations.push(MSG_PREVIEW_CLOUDFLARE_ENV);
+      continue;
+    }
+    if (isProductionEnvName(value)) {
+      violations.push(MSG_PRODUCTION_CLOUDFLARE_ENV);
+    }
   }
-  return tokens;
+
+  if (isPreview && envNames.some((name) => name.trim() !== "")) {
+    violations.push(MSG_PREVIEW_ENV_SELECTION);
+    return violations;
+  }
+
+  for (const name of envNames) {
+    if (isProductionEnvName(name)) {
+      violations.push(MSG_PRODUCTION_ENV_FLAG);
+    }
+  }
+  return violations;
 }
 
 /**
@@ -179,11 +226,22 @@ function wranglerTokens(commandLine) {
  * @param {string} productionWorkerName
  * @returns {string[]}
  */
-export function findWranglerInvocationViolations(invocation, productionWorkerName) {
+/**
+ * @param {string} invocation
+ * @param {string} productionWorkerName
+ * @param {{ fullLine?: string }} [options]
+ * @returns {string[]}
+ */
+export function findWranglerInvocationViolations(
+  invocation,
+  productionWorkerName,
+  options = {},
+) {
   const violations = [];
   const normalized = invocation.replace(/\s+/g, " ").trim();
+  const fullLine = options.fullLine ?? normalized;
 
-  if (!/\bwrangler\b/i.test(normalized)) {
+  if (!lineMentionsWrangler(normalized)) {
     return violations;
   }
 
@@ -201,11 +259,25 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
     violations.push(`targets production Worker name ${productionWorkerName}`);
   }
 
-  const subcommandMatch = normalized.match(/\bwrangler\s+([a-z][a-z0-9-]*)/i);
-  const subcommand = subcommandMatch?.[1]?.toLowerCase() ?? "";
+  const parsed = parseWranglerInvocation(normalized);
+  const cloudflareValues = parseCloudflareEnvAssignments(fullLine);
+  violations.push(
+    ...findWranglerEnvSelectionViolations(
+      parsed.envNames,
+      cloudflareValues,
+      parsed.subcommand,
+    ),
+  );
 
+  const subcommand = parsed.subcommand;
   const configPaths = collectWranglerConfigPaths(normalized);
   const configViolations = validateWranglerConfigPaths(configPaths);
+
+  if (!subcommand) {
+    violations.push(MSG_NO_SUBCOMMAND);
+    violations.push(...configViolations);
+    return violations;
+  }
 
   if (subcommand === "preview") {
     violations.push(...configViolations);
@@ -218,12 +290,10 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
     return violations;
   }
 
-  if (subcommand && subcommand !== "preview") {
-    violations.push(
-      `unexpected wrangler subcommand "${subcommand}" in pull request workflow`,
-    );
-    violations.push(...configViolations);
-  }
+  violations.push(
+    `unexpected wrangler subcommand "${subcommand}" in pull request workflow`,
+  );
+  violations.push(...configViolations);
 
   return violations;
 }
@@ -237,23 +307,62 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
 function findRunScriptWranglerViolations(script, productionWorkerName, stepLabel) {
   const violations = [];
   const joined = joinShellContinuationLines(script);
-  if (!joined || !/\bwrangler\b/i.test(joined)) {
+  if (!joined || !lineMentionsWrangler(joined)) {
     return violations;
   }
   for (const line of joined.split("\n")) {
-    if (!/\bwrangler\b/i.test(line)) {
+    if (!lineMentionsWrangler(line)) {
       continue;
     }
-    for (const invocation of wranglerTokens(line)) {
+    for (const invocation of extractWranglerInvocations(line)) {
       for (const message of findWranglerInvocationViolations(
         invocation,
         productionWorkerName,
+        { fullLine: line },
       )) {
         violations.push(`${stepLabel}: ${message}`);
       }
     }
   }
   return violations;
+}
+
+/**
+ * @param {unknown} envBlock
+ * @returns {string | null}
+ */
+function readCloudflareEnvFromMap(envBlock) {
+  if (!envBlock || typeof envBlock !== "object" || Array.isArray(envBlock)) {
+    return null;
+  }
+  const value = envBlock.CLOUDFLARE_ENV;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return String(value).trim();
+}
+
+/**
+ * @param {Record<string, unknown>} workflow
+ * @param {Record<string, unknown>} job
+ * @param {Record<string, unknown>} step
+ * @param {string} stepLabel
+ * @returns {string[]}
+ */
+function findStepCloudflareEnvViolations(workflow, job, step, stepLabel) {
+  const run = step.run;
+  if (typeof run !== "string" || !scriptRunsWranglerPreview(run)) {
+    return [];
+  }
+  const values = [
+    readCloudflareEnvFromMap(workflow.env),
+    readCloudflareEnvFromMap(job.env),
+    readCloudflareEnvFromMap(step.env),
+  ].filter((v) => v !== null && v !== "");
+  if (values.length === 0) {
+    return [];
+  }
+  return [`${stepLabel}: ${MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW}`];
 }
 
 /**
@@ -295,6 +404,9 @@ export function findPullRequestWorkflowViolations(
       const run = step.run;
       if (typeof run === "string") {
         messages.push(
+          ...findStepCloudflareEnvViolations(workflow, job, step, stepLabel),
+        );
+        messages.push(
           ...findRunScriptWranglerViolations(run, productionWorkerName, stepLabel),
         );
         if (run.includes("wrangler-preview-delete.mjs")) {
@@ -335,6 +447,64 @@ export function readProductionWorkerName(root) {
 
 /**
  * @param {Record<string, unknown>} config
+ * @returns {Set<string>}
+ */
+export function collectD1IdSet(config) {
+  const ids = new Set();
+  /**
+   * @param {unknown} value
+   */
+  const add = (value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const text = String(value).trim();
+    if (text) {
+      ids.add(text);
+    }
+  };
+  if (Array.isArray(config.d1_databases)) {
+    for (const entry of config.d1_databases) {
+      if (entry && typeof entry === "object") {
+        add(entry.database_id);
+        add(entry.preview_database_id);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * @param {Record<string, unknown>} config
+ * @returns {Set<string>}
+ */
+export function collectKvIdSet(config) {
+  const ids = new Set();
+  /**
+   * @param {unknown} value
+   */
+  const add = (value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    const text = String(value).trim();
+    if (text) {
+      ids.add(text);
+    }
+  };
+  if (Array.isArray(config.kv_namespaces)) {
+    for (const entry of config.kv_namespaces) {
+      if (entry && typeof entry === "object") {
+        add(entry.id);
+        add(entry.preview_id);
+      }
+    }
+  }
+  return ids;
+}
+
+/**
+ * @param {Record<string, unknown>} config
  * @returns {string[]}
  */
 export function collectWranglerResourceIds(config) {
@@ -353,20 +523,6 @@ export function collectWranglerResourceIds(config) {
     }
   };
 
-  if (Array.isArray(config.d1_databases)) {
-    for (const entry of config.d1_databases) {
-      if (entry && typeof entry === "object") {
-        add("d1", entry.database_id);
-      }
-    }
-  }
-  if (Array.isArray(config.kv_namespaces)) {
-    for (const entry of config.kv_namespaces) {
-      if (entry && typeof entry === "object") {
-        add("kv", entry.id);
-      }
-    }
-  }
   if (Array.isArray(config.r2_buckets)) {
     for (const entry of config.r2_buckets) {
       if (entry && typeof entry === "object") {
@@ -466,15 +622,156 @@ export function collectWranglerResourceIds(config) {
 }
 
 /**
+ * @param {Record<string, unknown>} preview
+ * @param {string} [configLabel]
+ * @returns {string[]}
+ */
+export function findPreviewD1BindingViolations(preview, configLabel = PREVIEW_CONFIG) {
+  const violations = [];
+  if (!Array.isArray(preview.d1_databases)) {
+    return violations;
+  }
+  for (const entry of preview.d1_databases) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const name =
+      entry.database_name !== undefined && entry.database_name !== null
+        ? String(entry.database_name).trim()
+        : "";
+    const id =
+      entry.database_id !== undefined && entry.database_id !== null
+        ? String(entry.database_id).trim()
+        : "";
+    const binding =
+      entry.binding !== undefined && entry.binding !== null
+        ? String(entry.binding).trim()
+        : "";
+    if (!name && !id && !binding) {
+      violations.push(`${configLabel} d1_databases entry is empty (no name or id)`);
+      continue;
+    }
+    if (name && !id) {
+      violations.push(
+        `${configLabel} d1_databases entry "${name}" has database_name but no database_id`,
+      );
+    }
+  }
+  return violations;
+}
+
+/**
+ * @param {Record<string, unknown>} section
+ * @param {string} productionWorkerName
+ * @param {string} [configLabel]
+ * @returns {string[]}
+ */
+export function findPreviewIsolationViolations(
+  section,
+  productionWorkerName,
+  configLabel = PREVIEW_CONFIG,
+) {
+  const violations = [];
+  const prodLower = productionWorkerName.trim().toLowerCase();
+
+  if (Array.isArray(section.services)) {
+    for (const entry of section.services) {
+      if (entry && typeof entry === "object") {
+        const service = entry.service;
+        if (typeof service === "string" && service.trim().toLowerCase() === prodLower) {
+          violations.push(
+            `${configLabel} service binding targets production Worker "${productionWorkerName}"`,
+          );
+        }
+      }
+    }
+  }
+
+  if (section.durable_objects && typeof section.durable_objects === "object") {
+    const bindings = section.durable_objects.bindings;
+    if (Array.isArray(bindings)) {
+      for (const entry of bindings) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+        const scriptName = entry.script_name ?? entry.service;
+        if (
+          typeof scriptName === "string" &&
+          scriptName.trim().toLowerCase() === prodLower
+        ) {
+          violations.push(
+            `${configLabel} durable_objects binding targets production Worker "${productionWorkerName}"`,
+          );
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(section.tail_consumers)) {
+    for (const entry of section.tail_consumers) {
+      if (entry && typeof entry === "object") {
+        const service = entry.service;
+        if (typeof service === "string" && service.trim().toLowerCase() === prodLower) {
+          violations.push(
+            `${configLabel} tail_consumers targets production Worker "${productionWorkerName}"`,
+          );
+        }
+      }
+    }
+  }
+
+  if (section.routes !== undefined && section.routes !== null) {
+    violations.push(`${configLabel} must not define routes (production routing)`);
+  }
+  if (section.route !== undefined && section.route !== null) {
+    violations.push(`${configLabel} must not define route (production routing)`);
+  }
+  if (section.custom_domains !== undefined && section.custom_domains !== null) {
+    violations.push(
+      `${configLabel} must not define custom_domains (production routing)`,
+    );
+  }
+
+  return violations;
+}
+
+/**
+ * @param {Record<string, unknown>} preview
+ * @returns {string[]}
+ */
+export function findPreviewEnvKeyViolations(preview) {
+  if (preview.env !== undefined && preview.env !== null) {
+    return [`${PREVIEW_CONFIG} ${MSG_PREVIEW_CONFIG_ENV_KEY}`];
+  }
+  return [];
+}
+
+/**
  * @param {Record<string, unknown>} production
  * @param {Record<string, unknown>} preview
  * @returns {string[]}
  */
 export function findSharedResourceIdViolations(production, preview) {
-  const prodIds = new Set(collectWranglerResourceIds(production));
   const violations = [];
+  const prodD1 = collectD1IdSet(production);
+  const prodKv = collectKvIdSet(production);
+  for (const id of collectD1IdSet(preview)) {
+    if (prodD1.has(id)) {
+      violations.push(
+        `shared D1 database id ${id} between ${PRODUCTION_CONFIG} and ${PREVIEW_CONFIG}`,
+      );
+    }
+  }
+  for (const id of collectKvIdSet(preview)) {
+    if (prodKv.has(id)) {
+      violations.push(
+        `shared KV namespace id ${id} between ${PRODUCTION_CONFIG} and ${PREVIEW_CONFIG}`,
+      );
+    }
+  }
+  const prodOther = new Set(collectWranglerResourceIds(production));
   for (const id of collectWranglerResourceIds(preview)) {
-    if (prodIds.has(id)) {
+    if (prodOther.has(id)) {
       violations.push(
         `shared Cloudflare resource ${id} between ${PRODUCTION_CONFIG} and ${PREVIEW_CONFIG}`,
       );
@@ -519,6 +816,9 @@ export function findPreviewConfigViolations(root) {
   }
 
   violations.push(...findSharedResourceIdViolations(production, preview));
+  violations.push(...findPreviewD1BindingViolations(preview));
+  violations.push(...findPreviewIsolationViolations(preview, productionName));
+  violations.push(...findPreviewEnvKeyViolations(preview));
 
   return violations;
 }
