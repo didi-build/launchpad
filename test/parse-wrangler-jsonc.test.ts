@@ -73,6 +73,21 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(() => parseWranglerJsonc(text)).toThrow(/parse error/i);
   });
 
+  it("throws when whitespace would merge JSON tokens outside strings", () => {
+    expect(() => parseWranglerJsonc('{"a": 1 2}')).toThrow(/parse error/i);
+    expect(() => parseWranglerJsonc('{"a": tr ue}')).toThrow(/parse error/i);
+    expect(() => parseWranglerJsonc('{"a": 1\u00A02}')).toThrow(/parse error/i);
+  });
+
+  it("throws when block comments would merge JSON tokens outside strings", () => {
+    expect(() => parseWranglerJsonc('{"a": 1/**/2}')).toThrow(/parse error/i);
+    expect(() => parseWranglerJsonc('{"a": tr/**/ue}')).toThrow(/parse error/i);
+  });
+
+  it("parses values separated from tokens by block comments", () => {
+    expect(parseWranglerJsonc('{"a": /**/1}')).toEqual({ a: 1 });
+  });
+
   it("throws when expectedName does not match top-level name", () => {
     const text = `{
   "name": "other",

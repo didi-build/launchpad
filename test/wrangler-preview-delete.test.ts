@@ -58,4 +58,19 @@ describe("isPreviewMissingError (unit)", () => {
     expect(isPreviewMissingError("Resource not found for token", "pr-1")).toBe(false);
     expect(isPreviewMissingError("does not exist", "pr-1")).toBe(false);
   });
+
+  it("does not treat a different API resource with code 10025 as missing preview", () => {
+    const detail = `A request to the Cloudflare API (/accounts/abc/workers/workers/launchpad/versions/pr-42) failed.
+
+  Resource not found [code: 10025]`;
+    expect(isPreviewMissingError(detail, "pr-42")).toBe(false);
+  });
+
+  it("does not treat previews URL for another preview name as missing preview", () => {
+    const detail = `A request to the Cloudflare API (/accounts/abc/workers/workers/launchpad/previews/pr-42) failed.
+
+  Resource not found [code: 10025]`;
+    expect(isPreviewMissingError(detail, "pr-1")).toBe(false);
+    expect(isPreviewMissingError(detail, "pr-4")).toBe(false);
+  });
 });
