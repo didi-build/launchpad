@@ -1,6 +1,6 @@
 /** @typedef {{ subcommand: string; envNames: string[]; cloudflareEnv: string | null }} WranglerParseResult */
 
-const WRANGLER_CMD = String.raw`(?:"wrangler"|'wrangler'|(?<![\'"])wrangler(?:@[^\s/]+)?(?=\s|$|[;&|]))`;
+const WRANGLER_CMD = String.raw`(?:"wrangler(?:@[^"]+)?"|'wrangler(?:@[^']+)?'|(?<![\'"])wrangler(?:@[^\s/]+)?(?=\s|$|[;&|]))`;
 
 const INVOCATION_START_RE = new RegExp(
   String.raw`\b(?:(?:npm\s+exec|npx|bunx)\s+)?${WRANGLER_CMD}`,
@@ -79,6 +79,24 @@ const KNOWN_SUBCOMMANDS = new Set([
 ]);
 
 /**
+ * @param {string} raw
+ * @returns {string}
+ */
+export function stripWranglerQuotes(raw) {
+  if (!raw) {
+    return "";
+  }
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  return value;
+}
+
+/**
  * @param {string} text
  * @returns {string[]}
  */
@@ -116,29 +134,52 @@ export function shellSplit(text) {
 }
 
 /**
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function parseCloudflareEnvAssignments(text) {
+  const values = [];
+  if (!text) {
+    return values;
+  }
+  const re = /(?:^|\s)(?:export\s+)?CLOUDFLARE_ENV=(?:"([^"]*)"|'([^']*)'|([^\s]+))/gi;
+  let match = re.exec(text);
+  while (match) {
+    values.push(stripWranglerQuotes(match[1] ?? match[2] ?? match[3] ?? ""));
+    match = re.exec(text);
+  }
+  const envCmd = /\benv\s+CLOUDFLARE_ENV=(?:"([^"]*)"|'([^']*)'|(\S+))/gi;
+  match = envCmd.exec(text);
+  while (match) {
+    values.push(stripWranglerQuotes(match[1] ?? match[2] ?? match[3] ?? ""));
+    match = envCmd.exec(text);
+  }
+  return values;
+}
+
+/**
  * @param {string} invocation
  * @returns {WranglerParseResult}
  */
 export function parseWranglerInvocation(invocation) {
   const normalized = invocation.replace(/\s+/g, " ").trim();
+  const envNames = [];
   let cloudflareEnv = null;
-  const envPrefix = normalized.match(
-    /^(?:export\s+)?CLOUDFLARE_ENV=(?:"([^"]*)"|'([^']*)'|(\S+))\s+/i,
-  );
-  let rest = normalized;
-  if (envPrefix) {
-    cloudflareEnv = (envPrefix[1] ?? envPrefix[2] ?? envPrefix[3] ?? "").trim();
-    rest = normalized.slice(envPrefix[0].length);
+  const prefixValues = parseCloudflareEnvAssignments(normalized);
+  if (prefixValues.length > 0) {
+    cloudflareEnv = prefixValues[0];
   }
 
-  const envNames = [];
-  const startMatch = rest.match(INVOCATION_START_RE);
+  const startMatch = normalized.match(INVOCATION_START_RE);
   if (!startMatch || startMatch.index === undefined) {
     return { subcommand: "", envNames, cloudflareEnv };
   }
 
-  const afterWrangler = rest.slice(startMatch.index + startMatch[0].length).trim();
+  const afterWrangler = normalized
+    .slice(startMatch.index + startMatch[0].length)
+    .trim();
   const tokens = shellSplit(afterWrangler);
+  let subcommand = "";
   let i = 0;
   while (i < tokens.length) {
     const token = tokens[i];
@@ -150,18 +191,19 @@ export function parseWranglerInvocation(invocation) {
       const eq = token.indexOf("=");
       if (eq !== -1) {
         const flag = token.slice(0, eq);
-        const value = token.slice(eq + 1);
+        const value = stripWranglerQuotes(token.slice(eq + 1));
         if (flag === "-e" || flag === "--env") {
           envNames.push(value);
         }
         i += 1;
         continue;
       }
+      if (token === "-e" || token === "--env") {
+        envNames.push(stripWranglerQuotes(tokens[i + 1] ?? ""));
+        i += 2;
+        continue;
+      }
       if (FLAGS_WITH_VALUE.has(token)) {
-        const value = tokens[i + 1] ?? "";
-        if (token === "-e" || token === "--env") {
-          envNames.push(value);
-        }
         i += 2;
         continue;
       }
@@ -169,13 +211,13 @@ export function parseWranglerInvocation(invocation) {
       continue;
     }
     const lower = token.toLowerCase();
-    if (KNOWN_SUBCOMMANDS.has(lower)) {
-      return { subcommand: lower, envNames, cloudflareEnv };
+    if (!subcommand && KNOWN_SUBCOMMANDS.has(lower)) {
+      subcommand = lower;
     }
-    return { subcommand: lower, envNames, cloudflareEnv };
+    i += 1;
   }
 
-  return { subcommand: "", envNames, cloudflareEnv };
+  return { subcommand, envNames, cloudflareEnv };
 }
 
 /**
@@ -202,4 +244,59 @@ export function extractWranglerInvocations(commandLine) {
  */
 export function lineMentionsWrangler(line) {
   return INVOCATION_START_RE.test(line);
+}
+
+/**
+ * @param {string} script
+ * @returns {boolean}
+ */
+export function scriptRunsWranglerPreview(script) {
+  const joined = joinShellContinuationLinesForPreview(script);
+  for (const line of joined.split("\n")) {
+    if (!lineMentionsWrangler(line)) {
+      continue;
+    }
+    for (const invocation of extractWranglerInvocations(line)) {
+      if (parseWranglerInvocation(invocation).subcommand === "preview") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Minimal join for preview detection (avoids circular import from wrangler-config-path).
+ *
+ * @param {string} script
+ * @returns {string}
+ */
+function joinShellContinuationLinesForPreview(script) {
+  if (!script) {
+    return "";
+  }
+  const physical = script.split(/\r?\n/);
+  const merged = [];
+  let current = "";
+  for (const line of physical) {
+    if (current) {
+      const next = line.replace(/^\s*/, "");
+      if (current && !/\s$/.test(current) && next.length > 0) {
+        current += " ";
+      }
+      current += next;
+    } else {
+      current = line;
+    }
+    if (current.endsWith("\\")) {
+      current = current.slice(0, -1).replace(/\s+$/, "");
+      continue;
+    }
+    merged.push(current);
+    current = "";
+  }
+  if (current) {
+    merged.push(current);
+  }
+  return merged.join("\n");
 }

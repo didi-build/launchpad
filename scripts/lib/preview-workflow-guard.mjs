@@ -13,8 +13,25 @@ import {
 import {
   extractWranglerInvocations,
   lineMentionsWrangler,
+  parseCloudflareEnvAssignments,
   parseWranglerInvocation,
+  scriptRunsWranglerPreview,
 } from "./wrangler-invocation-parse.mjs";
+
+export const MSG_PREVIEW_ENV_SELECTION =
+  "uses wrangler environment selection on preview (forbidden -e/--env and CLOUDFLARE_ENV on preview)";
+export const MSG_PREVIEW_CLOUDFLARE_ENV =
+  "uses CLOUDFLARE_ENV on preview invocation (forbidden)";
+export const MSG_PRODUCTION_ENV_FLAG =
+  "uses wrangler -e/--env production (preview must not target production)";
+export const MSG_PRODUCTION_CLOUDFLARE_ENV =
+  "uses CLOUDFLARE_ENV=production (preview must not target production)";
+export const MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW =
+  "uses CLOUDFLARE_ENV in workflow env on preview invocation (forbidden)";
+export const MSG_NO_SUBCOMMAND =
+  "wrangler invocation has no recognizable subcommand after flags";
+export const MSG_PREVIEW_CONFIG_ENV_KEY =
+  "must not define env (use top-level preview config only)";
 
 export const PREVIEW_WORKFLOW_BASENAME = "preview.yml";
 export { PREVIEW_CONFIG, PRODUCTION_CONFIG };
@@ -166,21 +183,39 @@ function isProductionEnvName(envName) {
 
 /**
  * @param {string[]} envNames
- * @param {string | null} cloudflareEnv
+ * @param {string[]} cloudflareEnvValues
+ * @param {string} subcommand
  * @returns {string[]}
  */
-function findWranglerEnvSelectionViolations(envNames, cloudflareEnv) {
+export function findWranglerEnvSelectionViolations(
+  envNames,
+  cloudflareEnvValues,
+  subcommand,
+) {
   const violations = [];
-  if (cloudflareEnv && isProductionEnvName(cloudflareEnv)) {
-    violations.push(
-      "uses CLOUDFLARE_ENV=production (preview must not target production)",
-    );
+  const isPreview = subcommand === "preview";
+
+  for (const value of cloudflareEnvValues) {
+    if (!value) {
+      continue;
+    }
+    if (isPreview) {
+      violations.push(MSG_PREVIEW_CLOUDFLARE_ENV);
+      continue;
+    }
+    if (isProductionEnvName(value)) {
+      violations.push(MSG_PRODUCTION_CLOUDFLARE_ENV);
+    }
   }
+
+  if (isPreview && envNames.some((name) => name.trim() !== "")) {
+    violations.push(MSG_PREVIEW_ENV_SELECTION);
+    return violations;
+  }
+
   for (const name of envNames) {
     if (isProductionEnvName(name)) {
-      violations.push(
-        "uses wrangler -e/--env production (preview must not target production)",
-      );
+      violations.push(MSG_PRODUCTION_ENV_FLAG);
     }
   }
   return violations;
@@ -191,9 +226,20 @@ function findWranglerEnvSelectionViolations(envNames, cloudflareEnv) {
  * @param {string} productionWorkerName
  * @returns {string[]}
  */
-export function findWranglerInvocationViolations(invocation, productionWorkerName) {
+/**
+ * @param {string} invocation
+ * @param {string} productionWorkerName
+ * @param {{ fullLine?: string }} [options]
+ * @returns {string[]}
+ */
+export function findWranglerInvocationViolations(
+  invocation,
+  productionWorkerName,
+  options = {},
+) {
   const violations = [];
   const normalized = invocation.replace(/\s+/g, " ").trim();
+  const fullLine = options.fullLine ?? normalized;
 
   if (!lineMentionsWrangler(normalized)) {
     return violations;
@@ -214,8 +260,13 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
   }
 
   const parsed = parseWranglerInvocation(normalized);
+  const cloudflareValues = parseCloudflareEnvAssignments(fullLine);
   violations.push(
-    ...findWranglerEnvSelectionViolations(parsed.envNames, parsed.cloudflareEnv),
+    ...findWranglerEnvSelectionViolations(
+      parsed.envNames,
+      cloudflareValues,
+      parsed.subcommand,
+    ),
   );
 
   const subcommand = parsed.subcommand;
@@ -223,7 +274,7 @@ export function findWranglerInvocationViolations(invocation, productionWorkerNam
   const configViolations = validateWranglerConfigPaths(configPaths);
 
   if (!subcommand) {
-    violations.push("wrangler invocation has no recognizable subcommand after flags");
+    violations.push(MSG_NO_SUBCOMMAND);
     violations.push(...configViolations);
     return violations;
   }
@@ -267,12 +318,51 @@ function findRunScriptWranglerViolations(script, productionWorkerName, stepLabel
       for (const message of findWranglerInvocationViolations(
         invocation,
         productionWorkerName,
+        { fullLine: line },
       )) {
         violations.push(`${stepLabel}: ${message}`);
       }
     }
   }
   return violations;
+}
+
+/**
+ * @param {unknown} envBlock
+ * @returns {string | null}
+ */
+function readCloudflareEnvFromMap(envBlock) {
+  if (!envBlock || typeof envBlock !== "object" || Array.isArray(envBlock)) {
+    return null;
+  }
+  const value = envBlock.CLOUDFLARE_ENV;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return String(value).trim();
+}
+
+/**
+ * @param {Record<string, unknown>} workflow
+ * @param {Record<string, unknown>} job
+ * @param {Record<string, unknown>} step
+ * @param {string} stepLabel
+ * @returns {string[]}
+ */
+function findStepCloudflareEnvViolations(workflow, job, step, stepLabel) {
+  const run = step.run;
+  if (typeof run !== "string" || !scriptRunsWranglerPreview(run)) {
+    return [];
+  }
+  const values = [
+    readCloudflareEnvFromMap(workflow.env),
+    readCloudflareEnvFromMap(job.env),
+    readCloudflareEnvFromMap(step.env),
+  ].filter((v) => v !== null && v !== "");
+  if (values.length === 0) {
+    return [];
+  }
+  return [`${stepLabel}: ${MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW}`];
 }
 
 /**
@@ -313,6 +403,9 @@ export function findPullRequestWorkflowViolations(
       const stepLabel = `${fileName} job ${jobId} step ${i + 1}`;
       const run = step.run;
       if (typeof run === "string") {
+        messages.push(
+          ...findStepCloudflareEnvViolations(workflow, job, step, stepLabel),
+        );
         messages.push(
           ...findRunScriptWranglerViolations(run, productionWorkerName, stepLabel),
         );
@@ -594,6 +687,26 @@ export function findPreviewIsolationViolations(
     }
   }
 
+  if (section.durable_objects && typeof section.durable_objects === "object") {
+    const bindings = section.durable_objects.bindings;
+    if (Array.isArray(bindings)) {
+      for (const entry of bindings) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+        const scriptName = entry.script_name ?? entry.service;
+        if (
+          typeof scriptName === "string" &&
+          scriptName.trim().toLowerCase() === prodLower
+        ) {
+          violations.push(
+            `${configLabel} durable_objects binding targets production Worker "${productionWorkerName}"`,
+          );
+        }
+      }
+    }
+  }
+
   if (Array.isArray(section.tail_consumers)) {
     for (const entry of section.tail_consumers) {
       if (entry && typeof entry === "object") {
@@ -624,26 +737,13 @@ export function findPreviewIsolationViolations(
 
 /**
  * @param {Record<string, unknown>} preview
- * @param {string} productionWorkerName
  * @returns {string[]}
  */
-export function findPreviewEnvBlockViolations(preview, productionWorkerName) {
-  const violations = [];
-  const env = preview.env;
-  if (!env || typeof env !== "object" || Array.isArray(env)) {
-    return violations;
+export function findPreviewEnvKeyViolations(preview) {
+  if (preview.env !== undefined && preview.env !== null) {
+    return [`${PREVIEW_CONFIG} ${MSG_PREVIEW_CONFIG_ENV_KEY}`];
   }
-  for (const [name, section] of Object.entries(env)) {
-    if (!section || typeof section !== "object" || Array.isArray(section)) {
-      continue;
-    }
-    const label = `${PREVIEW_CONFIG} env.${name}`;
-    violations.push(
-      ...findPreviewIsolationViolations(section, productionWorkerName, label),
-    );
-    violations.push(...findPreviewD1BindingViolations(section, label));
-  }
-  return violations;
+  return [];
 }
 
 /**
@@ -718,7 +818,7 @@ export function findPreviewConfigViolations(root) {
   violations.push(...findSharedResourceIdViolations(production, preview));
   violations.push(...findPreviewD1BindingViolations(preview));
   violations.push(...findPreviewIsolationViolations(preview, productionName));
-  violations.push(...findPreviewEnvBlockViolations(preview, productionName));
+  violations.push(...findPreviewEnvKeyViolations(preview));
 
   return violations;
 }

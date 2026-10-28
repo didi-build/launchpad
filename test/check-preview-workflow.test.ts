@@ -14,6 +14,11 @@ import {
   findPullRequestWorkflowViolations,
   findSharedResourceIdViolations,
   findWranglerInvocationViolations,
+  MSG_NO_SUBCOMMAND,
+  MSG_PREVIEW_CLOUDFLARE_ENV,
+  MSG_PREVIEW_CONFIG_ENV_KEY,
+  MSG_PREVIEW_ENV_SELECTION,
+  MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW,
   workflowOnTriggersPullRequest,
 } from "../scripts/lib/preview-workflow-guard.mjs";
 import {
@@ -557,16 +562,19 @@ describe("preview-workflow guard DIDI-915 QA round 2 (unit)", () => {
     }
   });
 
-  it("findPreviewConfigViolations fails for prod bindings under env blocks (fixture)", () => {
+  it("findPreviewConfigViolations rejects any env key in wrangler.preview.jsonc (fixture)", () => {
     const messages = withPreviewFixture({
       env: {
         staging: {
-          services: [{ binding: "API", service: "launchpad" }],
-          routes: [{ pattern: "example.com/*" }],
+          name: "launchpad",
+          workers_dev: false,
+          d1_databases: [
+            { binding: "DB", database_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+          ],
         },
       },
     });
-    expect(messages.some((m) => m.includes("env.staging"))).toBe(true);
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CONFIG_ENV_KEY))).toBe(true);
   });
 
   it("detects cross-field D1 id sharing between database_id and preview_database_id", () => {
@@ -595,23 +603,118 @@ describe("preview-workflow guard DIDI-915 QA round 2 (unit)", () => {
     ).not.toEqual([]);
   });
 
-  it("blocks flags-before-subcommand deploy and env selection bypasses", () => {
+  it("blocks flags-before-subcommand deploy bypasses", () => {
     const cases = [
       "npx wrangler -c wrangler.jsonc deploy",
       "npx wrangler --config wrangler.preview.jsonc deploy",
       "npx wrangler --cwd . deploy",
       "wrangler -e production deploy",
       "npm exec wrangler -- deploy",
-      "CLOUDFLARE_ENV=production npx wrangler preview -c wrangler.preview.jsonc",
     ];
     for (const run of cases) {
-      const direct = findWranglerInvocationViolations(run, "launchpad");
+      const direct = findWranglerInvocationViolations(run, "launchpad", {
+        fullLine: run,
+      });
       const workflow = findPullRequestWorkflowViolations(
         prWorkflow(run),
         "preview.yml",
         "launchpad",
       );
       expect(direct.length + workflow.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("rejects wrangler preview environment selection in workflow runs", () => {
+    const previewBase = "npx wrangler preview -c wrangler.preview.jsonc --name pr-1";
+    const cases: { run: string; message: string }[] = [
+      { run: `${previewBase} -e production`, message: MSG_PREVIEW_ENV_SELECTION },
+      { run: `${previewBase} -e=production`, message: MSG_PREVIEW_ENV_SELECTION },
+      { run: `${previewBase} --env production`, message: MSG_PREVIEW_ENV_SELECTION },
+      { run: `${previewBase} --env=Production`, message: MSG_PREVIEW_ENV_SELECTION },
+      { run: `${previewBase} -e "production"`, message: MSG_PREVIEW_ENV_SELECTION },
+      { run: `${previewBase} --env=staging`, message: MSG_PREVIEW_ENV_SELECTION },
+      {
+        run: `CLOUDFLARE_ENV=production ${previewBase}`,
+        message: MSG_PREVIEW_CLOUDFLARE_ENV,
+      },
+      {
+        run: `FOO=1 CLOUDFLARE_ENV=production ${previewBase}`,
+        message: MSG_PREVIEW_CLOUDFLARE_ENV,
+      },
+    ];
+    for (const { run, message } of cases) {
+      const workflow = findPullRequestWorkflowViolations(
+        prWorkflow(run),
+        "preview.yml",
+        "launchpad",
+      );
+      expect(workflow.some((m) => m.includes(message))).toBe(true);
+    }
+  });
+
+  it("rejects CLOUDFLARE_ENV in workflow, job and step env on preview steps", () => {
+    const previewRun = "npx wrangler preview -c wrangler.preview.jsonc --name pr-1";
+    for (const workflow of [
+      {
+        on: { pull_request: {} },
+        env: { CLOUDFLARE_ENV: "staging" },
+        jobs: { preview: { steps: [{ run: previewRun }] } },
+        __rawText: "",
+      },
+      {
+        on: { pull_request: {} },
+        jobs: {
+          preview: {
+            env: { CLOUDFLARE_ENV: "staging" },
+            steps: [{ run: previewRun }],
+          },
+        },
+        __rawText: "",
+      },
+      {
+        on: { pull_request: {} },
+        jobs: {
+          preview: {
+            steps: [{ run: previewRun, env: { CLOUDFLARE_ENV: "staging" } }],
+          },
+        },
+        __rawText: "",
+      },
+    ]) {
+      const messages = findPullRequestWorkflowViolations(
+        workflow,
+        "preview.yml",
+        "launchpad",
+      );
+      expect(
+        messages.some((m) => m.includes(MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW)),
+      ).toBe(true);
+    }
+  });
+
+  it("fail-closed when wrangler has config flags but no subcommand", () => {
+    const run = "npx wrangler -c wrangler.preview.jsonc";
+    const violations = findWranglerInvocationViolations(run, "launchpad", {
+      fullLine: run,
+    });
+    expect(violations).toContain(MSG_NO_SUBCOMMAND);
+    expect(
+      findPullRequestWorkflowViolations(
+        prWorkflow(run),
+        "preview.yml",
+        "launchpad",
+      ).some((m) => m.includes(MSG_NO_SUBCOMMAND)),
+    ).toBe(true);
+  });
+
+  it("blocks quoted versioned wrangler deploy", () => {
+    for (const run of ['npx "wrangler@4" deploy', "npx 'wrangler@latest' deploy"]) {
+      const violations = findWranglerInvocationViolations(run, "launchpad", {
+        fullLine: run,
+      });
+      expect(violations.some((m) => m.includes("forbidden wrangler deploy"))).toBe(
+        true,
+      );
     }
   });
 
@@ -651,6 +754,12 @@ describe("preview-workflow guard DIDI-915 QA round 2 (unit)", () => {
       tail_consumers: [{ service: "launchpad" }],
     });
     expect(tail.some((m) => m.includes("tail_consumers"))).toBe(true);
+    const durable = withPreviewFixture({
+      durable_objects: {
+        bindings: [{ name: "DO", class_name: "C", script_name: "launchpad" }],
+      },
+    });
+    expect(durable.some((m) => m.includes("durable_objects binding"))).toBe(true);
   });
 });
 
