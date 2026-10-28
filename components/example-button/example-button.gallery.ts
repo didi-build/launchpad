@@ -1,11 +1,11 @@
-import specMarkdown from "../../specs/example-button.md?raw";
+import specMarkdown from "../../design/gallery/example-button/spec.md?raw";
 import type { GalleryEntry } from "../../gallery/lib/types.js";
 import { ExampleButton } from "./ExampleButton.js";
 
 export const exampleButtonGallery: GalleryEntry = {
   id: "example-button",
   title: "ExampleButton",
-  specPath: "specs/example-button.md",
+  specPath: "design/gallery/example-button/spec.md",
   specMarkdown,
   component: ExampleButton as GalleryEntry["component"],
   variants: [
