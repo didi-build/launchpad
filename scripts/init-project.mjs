@@ -166,7 +166,7 @@ const textFiles = [
   "AGENTS.md",
   "package.json",
   ...listFiles("docs"),
-  ...listFiles("specs"),
+  ...listFiles("design"),
   ...listFiles("components"),
   ...listFiles("gallery"),
   ...listFiles(".github"),

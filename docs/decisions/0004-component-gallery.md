@@ -28,3 +28,7 @@ New repos from Launchpad need a shared place to build UI from approved specs, pr
 - Derived repos inherit the same layout; `init-project` keeps `specs/`, `components/`, and `gallery/`.
 - Preview deploy uses preview-scoped repository secret names documented in README and runbooks; missing secrets are a neutral config state for the template.
 - Preview Worker isolation from production is documented in [0005](./0005-preview-worker-isolation.md).
+
+## Note (2026-10-28)
+
+Spec files now live under `design/<area>/<feature>/spec.md` with a `design/README.md` index (Didi Build layout convention, same as we-met). The decision bullets above still describe the original `specs/` path; new and derived repos use `design/` instead.
