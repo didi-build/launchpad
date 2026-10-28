@@ -1,12 +1,12 @@
 # Design ticket flow
 
-Every **design ticket** in Linear tracks gallery work from exploration through QA. Each design ticket has a **developer counterpart ticket** that stays blocked until the design ticket reaches **Done**. When the design ticket completes, it unblocks the developer ticket so implementation can proceed against the approved spec and gallery components.
+Every **design ticket** in Linear tracks gallery work through design as code in three steps: **MagicPath exploration**, then **design as code** (spec and gallery components), then **app wiring**. The **developer counterpart ticket** is created at breakdown and stays blocked until the design ticket reaches **Done**. The **Developer's** job on the counterpart ticket is wiring gallery components into the app. When the design ticket is **Done**, it unblocks the developer ticket so implementation can proceed against the approved spec and gallery components.
 
 The **spec directory (`specs/`) is designer-only.** See [Who edits what](./component-gallery.md#who-edits-what) in the component gallery doc for who may edit specs versus gallery components.
 
 ## Statuses
 
-Statuses below match Linear exactly. Move tickets through them in order unless your team agrees otherwise on a given ticket.
+Statuses below match Linear exactly. Move tickets through them in order.
 
 | #   | Status                              | Who acts | What happens                                                                                               |
 | --- | ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
@@ -16,7 +16,7 @@ Statuses below match Linear exactly. Move tickets through them in order unless y
 | 4   | Ready for design dev                | Designer | Spec PR (spec directory only) merged; QA merges on green CI                                                |
 | 5   | In design dev                       | Designer | Builds or updates gallery components from the spec                                                         |
 | 6   | Ready for review, then In QA Review | QA       | QA checks gallery components match the approved spec                                                       |
-| 7   | Done                                | none     | Unblocks the developer counterpart ticket; Designer adds the Spec section (merge commit, file paths) to it |
+| 7   | Done                                | Designer | Unblocks the developer counterpart ticket; Designer adds the Spec section (merge commit, file paths) to it |
 
 Row 6 is two Linear statuses in sequence: **Ready for review**, then **In QA Review**.
 
