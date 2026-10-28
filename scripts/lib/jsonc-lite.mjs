@@ -177,6 +177,7 @@ export function jsoncToJsonText(text) {
       continue;
     }
     if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\u00A0") {
+      out += ch === "\u00A0" ? " " : ch;
       i += 1;
       continue;
     }

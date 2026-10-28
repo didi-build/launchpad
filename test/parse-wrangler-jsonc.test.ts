@@ -73,6 +73,11 @@ describe("parseWranglerJsonc (unit)", () => {
     expect(() => parseWranglerJsonc(text)).toThrow(/parse error/i);
   });
 
+  it("throws when whitespace would merge JSON tokens outside strings", () => {
+    expect(() => parseWranglerJsonc('{"a": 1 2}')).toThrow(/parse error/i);
+    expect(() => parseWranglerJsonc('{"a": tr ue}')).toThrow(/parse error/i);
+  });
+
   it("throws when expectedName does not match top-level name", () => {
     const text = `{
   "name": "other",
