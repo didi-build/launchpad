@@ -1,6 +1,6 @@
 /** @typedef {{ subcommand: string; envNames: string[]; cloudflareEnv: string | null }} WranglerParseResult */
 
-const WRANGLER_CMD = String.raw`(?:"wrangler(?:@[^"]+)?"|'wrangler(?:@[^']+)?'|(?<![\'"])wrangler(?:@[^\s/]+)?(?=\s|$|[;&|]))`;
+const WRANGLER_CMD = String.raw`(?:"wrangler(?:@[^"]+)?"|'wrangler(?:@[^']+)?'|w"rangler"|w'rangler'|(?<![\'"])wrangler(?:@[^\s/]+)?(?=\s|$|[;&|]))`;
 
 const INVOCATION_START_RE = new RegExp(
   String.raw`\b(?:(?:npm\s+exec|npx|bunx)\s+)?${WRANGLER_CMD}`,
@@ -79,24 +79,6 @@ const KNOWN_SUBCOMMANDS = new Set([
 ]);
 
 /**
- * @param {string} raw
- * @returns {string}
- */
-export function stripWranglerQuotes(raw) {
-  if (!raw) {
-    return "";
-  }
-  let value = raw.trim();
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1).trim();
-  }
-  return value;
-}
-
-/**
  * @param {string} text
  * @returns {string[]}
  */
@@ -137,24 +119,39 @@ export function shellSplit(text) {
  * @param {string} text
  * @returns {string[]}
  */
+const CLOUDFLARE_ENV_VALUE = String.raw`(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))`;
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
 export function parseCloudflareEnvAssignments(text) {
   const values = [];
   if (!text) {
     return values;
   }
-  const re = /(?:^|\s)(?:export\s+)?CLOUDFLARE_ENV=(?:"([^"]*)"|'([^']*)'|([^\s]+))/gi;
+  const re = new RegExp(
+    String.raw`(?:^|[\s;|&])(?:\benv\s+|\bexport\s+|\bdeclare(?:\s+[-\w]+)*\s+)?CLOUDFLARE_ENV=${CLOUDFLARE_ENV_VALUE}`,
+    "gi",
+  );
   let match = re.exec(text);
   while (match) {
-    values.push(stripWranglerQuotes(match[1] ?? match[2] ?? match[3] ?? ""));
+    values.push((match[1] ?? match[2] ?? match[3] ?? "").trim());
     match = re.exec(text);
   }
-  const envCmd = /\benv\s+CLOUDFLARE_ENV=(?:"([^"]*)"|'([^']*)'|(\S+))/gi;
-  match = envCmd.exec(text);
-  while (match) {
-    values.push(stripWranglerQuotes(match[1] ?? match[2] ?? match[3] ?? ""));
-    match = envCmd.exec(text);
-  }
   return values;
+}
+
+/**
+ * @param {string} script
+ * @returns {boolean}
+ */
+export function scriptSetsCloudflareEnv(script) {
+  if (!script) {
+    return false;
+  }
+  const joined = joinShellContinuationLinesForPreview(script);
+  return /\bCLOUDFLARE_ENV\b/.test(joined);
 }
 
 /**
@@ -191,7 +188,7 @@ export function parseWranglerInvocation(invocation) {
       const eq = token.indexOf("=");
       if (eq !== -1) {
         const flag = token.slice(0, eq);
-        const value = stripWranglerQuotes(token.slice(eq + 1));
+        const value = token.slice(eq + 1).trim();
         if (flag === "-e" || flag === "--env") {
           envNames.push(value);
         }
@@ -199,7 +196,7 @@ export function parseWranglerInvocation(invocation) {
         continue;
       }
       if (token === "-e" || token === "--env") {
-        envNames.push(stripWranglerQuotes(tokens[i + 1] ?? ""));
+        envNames.push((tokens[i + 1] ?? "").trim());
         i += 2;
         continue;
       }
@@ -218,6 +215,51 @@ export function parseWranglerInvocation(invocation) {
   }
 
   return { subcommand, envNames, cloudflareEnv };
+}
+
+/**
+ * @param {string} invocation
+ * @returns {boolean}
+ */
+export function wranglerPreviewUsesSecretSubcommand(invocation) {
+  const normalized = invocation.replace(/\s+/g, " ").trim();
+  const startMatch = normalized.match(INVOCATION_START_RE);
+  if (!startMatch || startMatch.index === undefined) {
+    return false;
+  }
+  const afterWrangler = normalized
+    .slice(startMatch.index + startMatch[0].length)
+    .trim();
+  const tokens = shellSplit(afterWrangler);
+  let sawPreview = false;
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i];
+    if (token === "--") {
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      const eq = token.indexOf("=");
+      if (eq !== -1 || FLAGS_WITH_VALUE.has(token)) {
+        i += FLAGS_WITH_VALUE.has(token) && eq === -1 ? 2 : 1;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    const lower = token.toLowerCase();
+    if (!sawPreview && lower === "preview") {
+      sawPreview = true;
+      i += 1;
+      continue;
+    }
+    if (sawPreview && (lower === "secret" || lower === "secrets")) {
+      return true;
+    }
+    i += 1;
+  }
+  return false;
 }
 
 /**
