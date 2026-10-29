@@ -835,6 +835,16 @@ describe("preview-workflow guard DIDI-947 (unit)", () => {
     expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
   });
 
+  it("rejects bare export CLOUDFLARE_ENV in a preview job", () => {
+    const run = `export CLOUDFLARE_ENV\n${previewRun}`;
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
   describe("pins round-1 CLOUDFLARE_ENV parser (f1c8549 vs any-token)", () => {
     const quotedValue = 'echo "CLOUDFLARE_ENV=prod"';
     const cases: { label: string; setupRun: string }[] = [

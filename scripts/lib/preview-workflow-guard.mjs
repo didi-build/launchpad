@@ -1,3 +1,9 @@
+/**
+ * Preview workflow regression guard for PR-triggered GitHub Actions and wrangler.preview.jsonc.
+ * Not a security boundary; see docs/decisions/0005-preview-worker-isolation.md (Guard scope).
+ * Known accepted gaps are listed there and are intentionally out of scope for this parser.
+ */
+
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -19,12 +25,6 @@ import {
   scriptSetsCloudflareEnv,
   wranglerPreviewUsesSecretSubcommand,
 } from "./wrangler-invocation-parse.mjs";
-
-/**
- * Preview workflow regression guard for PR-triggered GitHub Actions and wrangler.preview.jsonc.
- * Not a security boundary; see docs/decisions/0005-preview-worker-isolation.md (Guard scope).
- * Known accepted gaps are listed there and are intentionally out of scope for this parser.
- */
 
 export const MSG_PREVIEW_ENV_SELECTION =
   "uses wrangler environment selection on preview (forbidden -e/--env and CLOUDFLARE_ENV on preview)";
