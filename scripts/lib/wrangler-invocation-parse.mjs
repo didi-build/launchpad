@@ -115,10 +115,6 @@ export function shellSplit(text) {
   return tokens;
 }
 
-/**
- * @param {string} text
- * @returns {string[]}
- */
 const CLOUDFLARE_ENV_VALUE = String.raw`(?:"([^"]*)"|'([^']*)'|([^\s;|&]+))`;
 
 /**
@@ -131,7 +127,7 @@ export function parseCloudflareEnvAssignments(text) {
     return values;
   }
   const re = new RegExp(
-    String.raw`(?:^|[\s;|&])(?:\benv\s+|\bexport\s+|\bdeclare(?:\s+[-\w]+)*\s+)?CLOUDFLARE_ENV=${CLOUDFLARE_ENV_VALUE}`,
+    String.raw`(?:^|[\s;|&])(?:\benv\s+|\bexport\s+)?CLOUDFLARE_ENV=${CLOUDFLARE_ENV_VALUE}`,
     "gi",
   );
   let match = re.exec(text);

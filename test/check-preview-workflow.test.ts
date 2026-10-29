@@ -30,7 +30,9 @@ import {
 } from "../scripts/lib/wrangler-config-path.mjs";
 import {
   parseWranglerInvocation,
+  parseCloudflareEnvAssignments,
   scriptRunsWranglerPreview,
+  scriptSetsCloudflareEnv,
 } from "../scripts/lib/wrangler-invocation-parse.mjs";
 import { deletePreviewByName } from "../scripts/lib/wrangler-preview-delete-lib.mjs";
 
@@ -788,6 +790,21 @@ describe("preview-workflow guard DIDI-947 (unit)", () => {
     };
   }
 
+  /** f1c8549 scriptSetsCloudflareEnv (round-1 item 1, before any-token scan). */
+  function scriptSetsCloudflareEnvF1c8549(script: string) {
+    if (!script) {
+      return false;
+    }
+    const joined = joinShellContinuationLines(script);
+    if (parseCloudflareEnvAssignments(joined).length > 0) {
+      return true;
+    }
+    if (/\bexport\s+CLOUDFLARE_ENV\b(?!=)/i.test(joined)) {
+      return true;
+    }
+    return /\bCLOUDFLARE_ENV\s*=/.test(joined) && />\s*\$GITHUB_ENV\b/.test(joined);
+  }
+
   it("rejects CLOUDFLARE_ENV on a separate line before wrangler preview", () => {
     const run = `export CLOUDFLARE_ENV=prod\n${previewRun}`;
     const messages = findPullRequestWorkflowViolations(
@@ -816,6 +833,45 @@ describe("preview-workflow guard DIDI-947 (unit)", () => {
       "launchpad",
     );
     expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  describe("pins round-1 CLOUDFLARE_ENV parser (f1c8549 vs any-token)", () => {
+    const quotedValue = 'echo "CLOUDFLARE_ENV=prod"';
+    const cases: { label: string; setupRun: string }[] = [
+      {
+        label: 'quoted value >> "$GITHUB_ENV"',
+        setupRun: `${quotedValue} >> "$GITHUB_ENV"`,
+      },
+      {
+        label: "quoted value >> ${GITHUB_ENV}",
+        setupRun: `${quotedValue} >> \${GITHUB_ENV}`,
+      },
+      {
+        label: "quoted value | tee $GITHUB_ENV",
+        setupRun: `${quotedValue} | tee $GITHUB_ENV`,
+      },
+      {
+        label: "quoted value | tee -a $GITHUB_ENV",
+        setupRun: `${quotedValue} | tee -a $GITHUB_ENV`,
+      },
+      {
+        label: "${CLOUDFLARE_ENV} reference in quoted write",
+        setupRun: 'echo "CLOUDFLARE_ENV=${CLOUDFLARE_ENV}" >> "$GITHUB_ENV"',
+      },
+    ];
+
+    for (const { label, setupRun } of cases) {
+      it(`rejects ${label} and pins any-token scan over f1c8549`, () => {
+        expect(scriptSetsCloudflareEnvF1c8549(setupRun)).toBe(false);
+        expect(scriptSetsCloudflareEnv(setupRun)).toBe(true);
+        const messages = findPullRequestWorkflowViolations(
+          prJob([{ run: setupRun }, { run: previewRun }]),
+          "preview.yml",
+          "launchpad",
+        );
+        expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+      });
+    }
   });
 
   it("rejects CLOUDFLARE_ENV written to GITHUB_ENV (unquoted path)", () => {

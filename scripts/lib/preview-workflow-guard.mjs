@@ -20,6 +20,12 @@ import {
   wranglerPreviewUsesSecretSubcommand,
 } from "./wrangler-invocation-parse.mjs";
 
+/**
+ * Preview workflow regression guard for PR-triggered GitHub Actions and wrangler.preview.jsonc.
+ * Not a security boundary; see docs/decisions/0005-preview-worker-isolation.md (Guard scope).
+ * Known accepted gaps are listed there and are intentionally out of scope for this parser.
+ */
+
 export const MSG_PREVIEW_ENV_SELECTION =
   "uses wrangler environment selection on preview (forbidden -e/--env and CLOUDFLARE_ENV on preview)";
 export const MSG_PREVIEW_CLOUDFLARE_ENV =
@@ -355,7 +361,6 @@ function readCloudflareEnvFromMap(envBlock) {
 }
 
 /**
- * @param {Record<string, unknown>} workflow
  * @param {Record<string, unknown>} job
  * @returns {boolean}
  */
