@@ -34,5 +34,12 @@ The guard does **not** catch, among other cases:
 - Direct `wrangler.js` or non-`npx wrangler` entrypoints
 - A shell variable holding the wrangler command (for example `CMD="wrangler deploy"`)
 - Local composite actions or `github-script` `exec` calls that invoke wrangler
+- A local composite action step that writes `CLOUDFLARE_ENV` to `$GITHUB_ENV` without the literal appearing in a parsed workflow `run` string
+- Reusable workflows that run wrangler without appearing in this repo's parsed YAML
 - `environment:` set by a dynamic expression instead of a static `production` string
 - `--cwd` or `--env` flags that switch config or target Workers outside the parsed command line
+- `CLOUDFLARE_ENV` split across shell quotes (name or value built from fragments)
+- `CLOUDFLARE_ENV` built indirectly from another variable without the literal token on any run step of the preview job
+- `CLOUDFLARE_ENV` set only inside a script file (sourced or executed), not in the workflow `run` string
+- `CLOUDFLARE_ENV` supplied via dotenv (`.env`, `.env.local`, or `--env-file`) rather than the workflow `run` string
+- Obfuscated wrangler spellings beyond the small quoted forms this guard recognizes (for example split across quotes like `wr"ang"ler`)

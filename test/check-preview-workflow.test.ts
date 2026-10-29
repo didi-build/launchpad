@@ -18,6 +18,8 @@ import {
   MSG_PREVIEW_CLOUDFLARE_ENV,
   MSG_PREVIEW_CONFIG_ENV_KEY,
   MSG_PREVIEW_ENV_SELECTION,
+  MSG_PREVIEW_NON_MAP_ENV,
+  MSG_PREVIEW_SECRET_SUBCOMMAND,
   MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW,
   workflowOnTriggersPullRequest,
 } from "../scripts/lib/preview-workflow-guard.mjs";
@@ -26,7 +28,12 @@ import {
   joinShellContinuationLines,
   validateWranglerConfigPaths,
 } from "../scripts/lib/wrangler-config-path.mjs";
-import { parseWranglerInvocation } from "../scripts/lib/wrangler-invocation-parse.mjs";
+import {
+  parseWranglerInvocation,
+  parseCloudflareEnvAssignments,
+  scriptRunsWranglerPreview,
+  scriptSetsCloudflareEnv,
+} from "../scripts/lib/wrangler-invocation-parse.mjs";
 import { deletePreviewByName } from "../scripts/lib/wrangler-preview-delete-lib.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -766,5 +773,241 @@ describe("preview-workflow guard DIDI-915 QA round 2 (unit)", () => {
 describe("check-preview-workflow CLI (subprocess)", () => {
   it("exits 0 for the Launchpad template checkout", () => {
     expect(runCli(root).status).toBe(0);
+  });
+});
+
+describe("preview-workflow guard DIDI-947 (unit)", () => {
+  const previewRun = "npx wrangler preview -c wrangler.preview.jsonc --name pr-1";
+
+  function prJob(
+    steps: Record<string, unknown>[],
+    jobExtra: Record<string, unknown> = {},
+  ) {
+    return {
+      on: { pull_request: {} },
+      jobs: { preview: { steps, ...jobExtra } },
+      __rawText: "",
+    };
+  }
+
+  /** f1c8549 scriptSetsCloudflareEnv (round-1 item 1, before any-token scan). */
+  function scriptSetsCloudflareEnvF1c8549(script: string) {
+    if (!script) {
+      return false;
+    }
+    const joined = joinShellContinuationLines(script);
+    if (parseCloudflareEnvAssignments(joined).length > 0) {
+      return true;
+    }
+    if (/\bexport\s+CLOUDFLARE_ENV\b(?!=)/i.test(joined)) {
+      return true;
+    }
+    return /\bCLOUDFLARE_ENV\s*=/.test(joined) && />\s*\$GITHUB_ENV\b/.test(joined);
+  }
+
+  it("rejects CLOUDFLARE_ENV on a separate line before wrangler preview", () => {
+    const run = `export CLOUDFLARE_ENV=prod\n${previewRun}`;
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects declare -x CLOUDFLARE_ENV in a preview job", () => {
+    const run = `declare -x CLOUDFLARE_ENV=staging\n${previewRun}`;
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects assignment then export CLOUDFLARE_ENV in a preview job", () => {
+    const run = `CLOUDFLARE_ENV=prod\nexport CLOUDFLARE_ENV\n${previewRun}`;
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects bare export CLOUDFLARE_ENV in a preview job", () => {
+    const run = `export CLOUDFLARE_ENV\n${previewRun}`;
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects shell parameter expansion default for CLOUDFLARE_ENV before preview", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run: ': "${CLOUDFLARE_ENV:=staging}"' }, { run: previewRun }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  describe("pins round-1 CLOUDFLARE_ENV parser (f1c8549 vs any-token)", () => {
+    const quotedValue = 'echo "CLOUDFLARE_ENV=prod"';
+    const cases: { label: string; setupRun: string }[] = [
+      {
+        label: 'quoted value >> "$GITHUB_ENV"',
+        setupRun: `${quotedValue} >> "$GITHUB_ENV"`,
+      },
+      {
+        label: "quoted value >> ${GITHUB_ENV}",
+        setupRun: `${quotedValue} >> \${GITHUB_ENV}`,
+      },
+      {
+        label: "quoted value | tee $GITHUB_ENV",
+        setupRun: `${quotedValue} | tee $GITHUB_ENV`,
+      },
+      {
+        label: "quoted value | tee -a $GITHUB_ENV",
+        setupRun: `${quotedValue} | tee -a $GITHUB_ENV`,
+      },
+      {
+        label: "${CLOUDFLARE_ENV} reference in quoted write",
+        setupRun: 'echo "CLOUDFLARE_ENV=${CLOUDFLARE_ENV}" >> "$GITHUB_ENV"',
+      },
+    ];
+
+    for (const { label, setupRun } of cases) {
+      it(`rejects ${label} and pins any-token scan over f1c8549`, () => {
+        expect(scriptSetsCloudflareEnvF1c8549(setupRun)).toBe(false);
+        expect(scriptSetsCloudflareEnv(setupRun)).toBe(true);
+        const messages = findPullRequestWorkflowViolations(
+          prJob([{ run: setupRun }, { run: previewRun }]),
+          "preview.yml",
+          "launchpad",
+        );
+        expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+      });
+    }
+  });
+
+  it("rejects CLOUDFLARE_ENV written to GITHUB_ENV (unquoted path)", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run: "echo CLOUDFLARE_ENV=prod >> $GITHUB_ENV" }, { run: previewRun }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects CLOUDFLARE_ENV written to quoted GITHUB_ENV path", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run: 'echo CLOUDFLARE_ENV=x >> "$GITHUB_ENV"' }, { run: previewRun }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects CLOUDFLARE_ENV written via braced GITHUB_ENV path", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run: "echo CLOUDFLARE_ENV=x >> ${GITHUB_ENV}" }, { run: previewRun }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("rejects CLOUDFLARE_ENV piped to tee -a GITHUB_ENV", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([
+        { run: "echo CLOUDFLARE_ENV=x | tee -a $GITHUB_ENV" },
+        { run: previewRun },
+      ]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_CLOUDFLARE_ENV))).toBe(true);
+  });
+
+  it("fail-closed on non-map job env expression on preview jobs", () => {
+    const messages = findPullRequestWorkflowViolations(
+      {
+        on: { pull_request: {} },
+        jobs: {
+          preview: {
+            env: '${{ fromJSON(\'{"CLOUDFLARE_ENV":"staging"}\') }}',
+            steps: [{ run: previewRun }],
+          },
+        },
+        __rawText: "",
+      },
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes(MSG_PREVIEW_NON_MAP_ENV))).toBe(true);
+  });
+
+  it("allows empty env map on preview jobs (mutation guard)", () => {
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run: previewRun }], { env: {} }),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages).toEqual([]);
+  });
+
+  it("rejects wrangler preview secret subcommand (CTO: keep rejecting)", () => {
+    for (const run of [
+      "npx wrangler preview -c wrangler.preview.jsonc secret put MY_KEY",
+      "npx wrangler preview -c wrangler.preview.jsonc secrets list",
+    ]) {
+      const direct = findWranglerInvocationViolations(run, "launchpad", {
+        fullLine: run,
+      });
+      expect(direct.some((m) => m.includes(MSG_PREVIEW_SECRET_SUBCOMMAND))).toBe(true);
+      const workflow = findPullRequestWorkflowViolations(
+        prJob([{ run }]),
+        "preview.yml",
+        "launchpad",
+      );
+      expect(workflow.some((m) => m.includes(MSG_PREVIEW_SECRET_SUBCOMMAND))).toBe(
+        true,
+      );
+    }
+  });
+
+  it("detects wrangler preview when continuation join is required", () => {
+    const run = `npx wrangler \\
+  preview -c wrangler.preview.jsonc --name pr-1`;
+    expect(scriptRunsWranglerPreview(run)).toBe(true);
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages).toEqual([]);
+  });
+
+  it("blocks forbidden flags split onto a shell continuation line", () => {
+    const run = `npx wrangler \\
+  preview -c wrangler.preview.jsonc --worker-name launchpad --name pr-1`;
+    expect(scriptRunsWranglerPreview(run)).toBe(true);
+    const messages = findPullRequestWorkflowViolations(
+      prJob([{ run }]),
+      "preview.yml",
+      "launchpad",
+    );
+    expect(messages.some((m) => m.includes("--worker-name"))).toBe(true);
+  });
+
+  it("blocks partial quoting on wrangler deploy", () => {
+    const run = 'npx w"rangler" deploy';
+    const violations = findWranglerInvocationViolations(run, "launchpad", {
+      fullLine: run,
+    });
+    expect(violations.some((m) => m.includes("forbidden wrangler deploy"))).toBe(true);
   });
 });

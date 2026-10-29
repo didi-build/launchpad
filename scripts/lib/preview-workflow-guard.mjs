@@ -1,3 +1,9 @@
+/**
+ * Preview workflow regression guard for PR-triggered GitHub Actions and wrangler.preview.jsonc.
+ * Not a security boundary; see docs/decisions/0005-preview-worker-isolation.md (Guard scope).
+ * Known accepted gaps are listed there and are intentionally out of scope for this parser.
+ */
+
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -16,6 +22,8 @@ import {
   parseCloudflareEnvAssignments,
   parseWranglerInvocation,
   scriptRunsWranglerPreview,
+  scriptSetsCloudflareEnv,
+  wranglerPreviewUsesSecretSubcommand,
 } from "./wrangler-invocation-parse.mjs";
 
 export const MSG_PREVIEW_ENV_SELECTION =
@@ -28,6 +36,10 @@ export const MSG_PRODUCTION_CLOUDFLARE_ENV =
   "uses CLOUDFLARE_ENV=production (preview must not target production)";
 export const MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW =
   "uses CLOUDFLARE_ENV in workflow env on preview invocation (forbidden)";
+export const MSG_PREVIEW_NON_MAP_ENV =
+  "uses non-map env on preview job (fail closed; env must be a mapping)";
+export const MSG_PREVIEW_SECRET_SUBCOMMAND =
+  "uses wrangler preview secret (forbidden on pull request workflows)";
 export const MSG_NO_SUBCOMMAND =
   "wrangler invocation has no recognizable subcommand after flags";
 export const MSG_PREVIEW_CONFIG_ENV_KEY =
@@ -280,6 +292,9 @@ export function findWranglerInvocationViolations(
   }
 
   if (subcommand === "preview") {
+    if (wranglerPreviewUsesSecretSubcommand(normalized)) {
+      violations.push(MSG_PREVIEW_SECRET_SUBCOMMAND);
+    }
     violations.push(...configViolations);
     return violations;
   }
@@ -329,40 +344,105 @@ function findRunScriptWranglerViolations(script, productionWorkerName, stepLabel
 
 /**
  * @param {unknown} envBlock
- * @returns {string | null}
+ * @returns {{ cloudflareEnv: string | null; nonMap: boolean }}
  */
 function readCloudflareEnvFromMap(envBlock) {
-  if (!envBlock || typeof envBlock !== "object" || Array.isArray(envBlock)) {
-    return null;
+  if (envBlock === undefined || envBlock === null) {
+    return { cloudflareEnv: null, nonMap: false };
+  }
+  if (typeof envBlock !== "object" || Array.isArray(envBlock)) {
+    return { cloudflareEnv: null, nonMap: true };
   }
   const value = envBlock.CLOUDFLARE_ENV;
   if (value === undefined || value === null) {
-    return null;
+    return { cloudflareEnv: null, nonMap: false };
   }
-  return String(value).trim();
+  return { cloudflareEnv: String(value).trim(), nonMap: false };
+}
+
+/**
+ * @param {Record<string, unknown>} job
+ * @returns {boolean}
+ */
+function jobRunsWranglerPreview(job) {
+  const steps = job.steps;
+  if (!Array.isArray(steps)) {
+    return false;
+  }
+  for (const step of steps) {
+    if (!step || typeof step !== "object") {
+      continue;
+    }
+    const run = step.run;
+    if (typeof run === "string" && scriptRunsWranglerPreview(run)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {unknown} envBlock
+ * @param {string} stepLabel
+ * @param {string[]} out
+ */
+function collectEnvBlockViolationsForPreviewJob(envBlock, stepLabel, out) {
+  const { cloudflareEnv, nonMap } = readCloudflareEnvFromMap(envBlock);
+  if (nonMap) {
+    out.push(`${stepLabel}: ${MSG_PREVIEW_NON_MAP_ENV}`);
+    return;
+  }
+  if (cloudflareEnv !== null && cloudflareEnv !== "") {
+    out.push(`${stepLabel}: ${MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW}`);
+  }
 }
 
 /**
  * @param {Record<string, unknown>} workflow
  * @param {Record<string, unknown>} job
- * @param {Record<string, unknown>} step
- * @param {string} stepLabel
+ * @param {string} jobId
+ * @param {string} fileName
  * @returns {string[]}
  */
-function findStepCloudflareEnvViolations(workflow, job, step, stepLabel) {
-  const run = step.run;
-  if (typeof run !== "string" || !scriptRunsWranglerPreview(run)) {
+function findJobPreviewCloudflareEnvViolations(workflow, job, jobId, fileName) {
+  if (!jobRunsWranglerPreview(job)) {
     return [];
   }
-  const values = [
-    readCloudflareEnvFromMap(workflow.env),
-    readCloudflareEnvFromMap(job.env),
-    readCloudflareEnvFromMap(step.env),
-  ].filter((v) => v !== null && v !== "");
-  if (values.length === 0) {
-    return [];
+  const violations = [];
+  collectEnvBlockViolationsForPreviewJob(
+    workflow.env,
+    `${fileName} job ${jobId} (workflow env)`,
+    violations,
+  );
+  collectEnvBlockViolationsForPreviewJob(
+    job.env,
+    `${fileName} job ${jobId} (job env)`,
+    violations,
+  );
+
+  const steps = job.steps;
+  if (!Array.isArray(steps)) {
+    return violations;
   }
-  return [`${stepLabel}: ${MSG_WORKFLOW_CLOUDFLARE_ENV_PREVIEW}`];
+
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    if (!step || typeof step !== "object") {
+      continue;
+    }
+    const stepLabel = `${fileName} job ${jobId} step ${i + 1}`;
+    collectEnvBlockViolationsForPreviewJob(
+      step.env,
+      `${stepLabel} (step env)`,
+      violations,
+    );
+    const run = step.run;
+    if (typeof run === "string" && scriptSetsCloudflareEnv(run)) {
+      violations.push(`${stepLabel}: ${MSG_PREVIEW_CLOUDFLARE_ENV}`);
+    }
+  }
+
+  return violations;
 }
 
 /**
@@ -395,6 +475,9 @@ export function findPullRequestWorkflowViolations(
     if (!Array.isArray(steps)) {
       continue;
     }
+    messages.push(
+      ...findJobPreviewCloudflareEnvViolations(workflow, job, jobId, fileName),
+    );
     for (let i = 0; i < steps.length; i += 1) {
       const step = steps[i];
       if (!step || typeof step !== "object") {
@@ -403,9 +486,6 @@ export function findPullRequestWorkflowViolations(
       const stepLabel = `${fileName} job ${jobId} step ${i + 1}`;
       const run = step.run;
       if (typeof run === "string") {
-        messages.push(
-          ...findStepCloudflareEnvViolations(workflow, job, step, stepLabel),
-        );
         messages.push(
           ...findRunScriptWranglerViolations(run, productionWorkerName, stepLabel),
         );
