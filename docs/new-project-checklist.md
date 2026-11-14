@@ -37,6 +37,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 - [ ] `npm install` and `npm run prepare` (installs git hooks)
 - [ ] Open a test PR; confirm **CI** runs `npm run check` (derived repos skip **template-smoke**; that job runs only on `didi-build/launchpad`)
+- [ ] Confirm **preview-check** passes on that PR: Foreman merges a PR only with it ([ADR 0006](./decisions/0006-foreman-preview-check.md))
 - [ ] Confirm the PR receives an **updated test-results comment** on push
 - [ ] Try committing a fake secret locally — pre-commit should block it
 
