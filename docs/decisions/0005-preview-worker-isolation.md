@@ -1,7 +1,9 @@
 # 0005. Isolate PR gallery previews on a dedicated preview Worker
 
-- **Status:** accepted
+- **Status:** superseded by [0007](./0007-worker-backend-and-staging-build.md) (Foreman's D-446, 2026-11-20)
 - **Date:** 2026-10-27
+
+> **Superseded** (2026-11-21). Projects have no hosted pull request previews: no preview Worker, database or secret (Foreman's D-446). The preview workflow, `wrangler.preview.jsonc`, the preview token and `npm run preview-workflow` are removed. CI's `preview-check` job, which builds the app and runs it on CI's own machine and deploys nothing, stays as QA's evidence ([ADR 0006](./0006-foreman-preview-check.md)). The text below is kept as the record of the old decision.
 
 ## Context
 

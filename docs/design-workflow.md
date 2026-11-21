@@ -29,4 +29,4 @@ Spec files live at `design/<area>/<feature>/spec.md` (see [component gallery](./
 - **(c)** When a design needs no gallery change (a copy-only spec), skip rows 5 and 6. The ticket goes **Done** when the spec PR merges.
 - **(d)** This v2 flow (approved by Diadem Oct 25, 2026, 10:50 PM ET on [DIDI-848](https://linear.app/didi-build/issue/DIDI-848)) replaces the earlier Oct 22 rule on when the design ticket goes **Done**.
 
-Related: [component gallery](./component-gallery.md) directories, local dev, and previews. Decision record: [ADR 0004](./decisions/0004-component-gallery.md).
+Related: [component gallery](./component-gallery.md) directories, local dev, and CI's preview check. Decision record: [ADR 0004](./decisions/0004-component-gallery.md).

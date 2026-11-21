@@ -1,12 +1,13 @@
 // Seam: CI's preview check scripts for Foreman (integration: the real server and probe on
-// 127.0.0.1 against a fake built site in a temporary folder, ADR 0006).
+// 127.0.0.1 against a fake built site in a temporary folder, ADR 0006; the Worker probe against
+// a fake Worker on 127.0.0.1, ADR 0007).
 // `.github/scripts/serve-site.mjs` serves the site; `.github/scripts/preview-check.mjs` writes
 // the commit marker and probes. Covered: a site that passes, a missing bundle marker, a wrong
 // commit, a server that does not answer, and the server's own rules. Both are also run as the
 // workflow runs them, as Node processes. Nothing leaves 127.0.0.1.
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import type { Server } from "node:http";
+import { createServer as createHttpServer, type Server } from "node:http";
 import {
   createServer as createTcpServer,
   type AddressInfo,
@@ -19,8 +20,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   COMMIT_MARKER_FILE,
   GALLERY_BUNDLE_MARKER,
+  HEALTH_PATH,
+  isHealthAnswer,
   PreviewCheckError,
   probeSite,
+  probeWorker,
   writeCommitMarker,
 } from "../.github/scripts/preview-check.mjs";
 import { HOST, startSiteServer } from "../.github/scripts/serve-site.mjs";
@@ -179,6 +183,101 @@ describe("the probe (integration: .github/scripts/preview-check.mjs probe on a l
   });
 });
 
+describe("the probe on the build's two pages (integration: probe on a local server)", () => {
+  it("finds the gallery at /gallery/index.html, beside the landing page at /", async () => {
+    const dir = site({
+      page: "<!doctype html><html><body><h1>My App</h1></body></html>",
+    });
+    const gallery = "/assets/gallery-Xy12_ab.js";
+    mkdirSync(join(dir, "gallery"));
+    writeFileSync(
+      join(dir, "gallery", "index.html"),
+      `<!doctype html><html><head><script type="module" crossorigin src="${gallery}"></script></head><body><div id="root"></div></body></html>`,
+    );
+    writeFileSync(
+      join(dir, gallery),
+      `console.log(${JSON.stringify(GALLERY_BUNDLE_MARKER)});`,
+    );
+    await expect(probeSite(await served(dir), HEAD, QUICK)).resolves.toBeUndefined();
+  });
+});
+
+/** A fake of the Worker run locally: the site's page, the marker and `/api/health`. */
+async function fakeWorker(
+  answers: { health?: [number, string]; marker?: string; page?: number } = {},
+): Promise<string> {
+  const [healthStatus, healthBody] = answers.health ?? [200, '{"status":"ok"}'];
+  const server = createHttpServer((request, response) => {
+    if (request.url === HEALTH_PATH) {
+      response.writeHead(healthStatus, { "content-type": "application/json" });
+      return response.end(healthBody);
+    }
+    if (request.url === `/${COMMIT_MARKER_FILE}`) {
+      response.writeHead(200, { "content-type": "text/plain" });
+      return response.end(answers.marker ?? `${HEAD}\n`);
+    }
+    response.writeHead(answers.page ?? 200, { "content-type": "text/html" });
+    return response.end("<!doctype html><title>My App</title>");
+  });
+  await new Promise<void>((done) => server.listen(0, HOST, done));
+  cleanups.push(() => new Promise<void>((done) => server.close(() => done())));
+  return `http://${HOST}:${(server.address() as AddressInfo).port}`;
+}
+
+const workerFailure = async (origin: string, commit = HEAD) =>
+  probeWorker(origin, commit, QUICK).then(
+    () => null,
+    (error: unknown) => (error as Error).message,
+  );
+
+describe("the Worker probe (integration: preview-check.mjs worker on a fake Worker)", () => {
+  it("passes when / answers, the marker is the commit and /api/health is exactly ok", async () => {
+    await expect(probeWorker(await fakeWorker(), HEAD, QUICK)).resolves.toBeUndefined();
+  });
+
+  it("fails on any other health answer, the single-page fallback's HTML included", async () => {
+    for (const health of [
+      [200, '{"status":"ok","extra":1}'],
+      [200, '{"status":"OK"}'],
+      [200, "<!doctype html><title>My App</title>"],
+      [503, '{"status":"ok"}'],
+    ] as [number, string][]) {
+      const message = await workerFailure(await fakeWorker({ health }));
+      expect(message, health[1]).toMatch(
+        /^\/api\/health (did not answer exactly|answered 503)/,
+      );
+    }
+  });
+
+  it("fails on a wrong commit and on a page that does not answer 200", async () => {
+    expect(await workerFailure(await fakeWorker({ marker: `${OTHER}\n` }))).toBe(
+      "the served foreman-commit.txt is not the commit",
+    );
+    expect(await workerFailure(await fakeWorker({ page: 404 }))).toBe("/ answered 404");
+  });
+
+  it("reads the health answer as Foreman's staging check does", () => {
+    expect(isHealthAnswer('{"status":"ok"}')).toBe(true);
+    expect(isHealthAnswer('{ "status" : "ok" }\n')).toBe(true);
+    for (const body of [
+      "",
+      "ok",
+      "[]",
+      "null",
+      '{"status":"ok","a":1}',
+      '{"status":1}',
+    ]) {
+      expect(isHealthAnswer(body), body).toBe(false);
+    }
+  });
+
+  it("refuses any origin but 127.0.0.1 before reaching anything", async () => {
+    await expect(probeWorker("http://localhost:8787", HEAD, QUICK)).rejects.toThrow(
+      /http:\/\/127\.0\.0\.1:<port>/,
+    );
+  });
+});
+
 describe("the static server (integration: .github/scripts/serve-site.mjs)", () => {
   it("listens on 127.0.0.1 only", async () => {
     const server = (await startSiteServer(site(), 0)) as Server;
@@ -277,7 +376,7 @@ describe("both scripts as the workflow runs them (integration: Node processes)",
 
 describe("what the scripts may use (unit: ADR 0006)", () => {
   it("import only Node's built-in modules, so the check adds no dependency", () => {
-    for (const path of [SERVE, PROBE]) {
+    for (const path of [SERVE, PROBE, ".github/scripts/staging-site.mjs"]) {
       const imports = [
         ...readFileSync(path, "utf8").matchAll(/^import .* from "([^"]+)";$/gm),
       ];

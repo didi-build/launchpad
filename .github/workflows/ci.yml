@@ -154,19 +154,25 @@ jobs:
         if: steps.install.outcome != 'success' || steps.check.outcome != 'success'
         run: exit 1
 
-  # Foreman's merge evidence (ADR 0006): builds the PR's head commit, serves the build on
-  # 127.0.0.1 and checks that the app loads and serves that commit. Foreman records this job's
-  # result as `preview_check`; the job name is fixed. No secret, no hosted service.
+  # Foreman's merge evidence (ADR 0006, ADR 0007): builds the PR's head commit, serves the build on
+  # 127.0.0.1 and checks that the app loads and serves that commit, then bundles the Worker with
+  # Wrangler's dry run, lays out the staging build and runs it locally with a local D1 database
+  # to probe / and /api/health. Foreman records this job's result as `preview_check`; the job name
+  # is fixed. No secret, no credential, no hosted service.
   preview-check:
     name: preview-check
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
       COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       SITE_PORT: "4173"
+      WORKER_PORT: "8787"
+      # Wrangler runs locally only: no metrics, and no fetch of Cloudflare's request.cf data.
+      WRANGLER_SEND_METRICS: "false"
+      CLOUDFLARE_CF_FETCH_ENABLED: "false"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -181,19 +187,31 @@ jobs:
       - name: Build the app
         run: npm run build
       - name: Write the commit marker
-        run: node .github/scripts/preview-check.mjs marker dist/gallery "$COMMIT_SHA"
+        run: node .github/scripts/preview-check.mjs marker dist/site "$COMMIT_SHA"
       - name: Serve the build on 127.0.0.1 and probe it
         run: |
           set -euo pipefail
-          node .github/scripts/serve-site.mjs dist/gallery "$SITE_PORT" &
+          node .github/scripts/serve-site.mjs dist/site "$SITE_PORT" &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           node .github/scripts/preview-check.mjs probe "http://127.0.0.1:${SITE_PORT}" "$COMMIT_SHA"
+      - name: Bundle the Worker (Wrangler's dry run, no credential)
+        run: npx wrangler deploy --dry-run --outdir dist/worker
+      - name: Lay out the staging build
+        run: node .github/scripts/staging-site.mjs --site dist/site --worker dist/worker/index.js --commit "$COMMIT_SHA" --out dist/staging-site
+      - name: Run the staging build locally with a local D1 database and probe it
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply DB --local
+          npx wrangler dev dist/staging-site/worker/index.js --no-bundle --assets dist/staging-site/assets --local --ip 127.0.0.1 --port "$WORKER_PORT" --show-interactive-dev-session=false &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          node .github/scripts/preview-check.mjs worker "http://127.0.0.1:${WORKER_PORT}" "$COMMIT_SHA"
       - name: Keep the probed build for the staging deploy
         if: github.event_name == 'push'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: staging-site
-          path: dist/gallery/
+          path: dist/staging-site/
           if-no-files-found: error
           retention-days: 7

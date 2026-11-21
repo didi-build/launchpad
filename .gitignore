@@ -20,6 +20,9 @@ test-results/
 .env
 .env.*
 !.env.example
+# Wrangler's local secrets for `wrangler dev`
+.dev.vars
+.dev.vars.*
 
 # Logs
 logs/

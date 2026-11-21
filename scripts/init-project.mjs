@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -21,7 +22,13 @@ import {
   formatNodriftMissingError,
   resolveNodriftCli,
 } from "./lib/resolve-nodrift-cli.mjs";
-import { replaceWranglerWorkerName } from "./lib/parse-wrangler-jsonc.mjs";
+import { addD1BindingsToDataMap, DATA_MAP_PATH } from "./lib/data-map-bindings.mjs";
+import {
+  parseWranglerJsonc,
+  replaceWranglerD1DatabaseName,
+  replaceWranglerWorkerName,
+  wranglerD1Bindings,
+} from "./lib/parse-wrangler-jsonc.mjs";
 import { validateWorkerSlug } from "./lib/worker-slug.mjs";
 
 const README_TEMPLATE = "README.project.md";
@@ -102,28 +109,20 @@ if (resolved.collects) {
 }
 
 const wranglerPath = "wrangler.jsonc";
-const wranglerPreviewPath = "wrangler.preview.jsonc";
 let wranglerRenamed = null;
-let wranglerPreviewRenamed = null;
+let d1Bindings = [];
+let listedD1Bindings = false;
 if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
   const wranglerText = readFileSync(wranglerPath, "utf8");
   try {
-    wranglerRenamed = replaceWranglerWorkerName(wranglerText, "launchpad", slug);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(message);
-    process.exit(1);
-  }
-}
-if (statSync(wranglerPreviewPath, { throwIfNoEntry: false })?.isFile()) {
-  const wranglerPreviewText = readFileSync(wranglerPreviewPath, "utf8");
-  try {
-    wranglerPreviewRenamed = replaceWranglerWorkerName(
-      wranglerPreviewText,
-      "launchpad-preview",
-      `${slug}-preview`,
-      { configLabel: "wrangler.preview.jsonc" },
+    // The Worker is named `<slug>`, and its D1 database `<slug>-staging`: the staging database
+    // Foreman makes for the project. Foreman names the staging Worker `<slug>-staging` itself.
+    wranglerRenamed = replaceWranglerD1DatabaseName(
+      replaceWranglerWorkerName(wranglerText, "launchpad", slug),
+      "launchpad-staging",
+      `${slug}-staging`,
     );
+    d1Bindings = wranglerD1Bindings(parseWranglerJsonc(wranglerRenamed));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(message);
@@ -165,6 +164,7 @@ const textFiles = [
   LICENSE_TEMPLATE,
   "AGENTS.md",
   "package.json",
+  "index.html",
   ...listFiles("docs"),
   ...listFiles("design"),
   ...listFiles("components"),
@@ -174,11 +174,22 @@ const textFiles = [
   "CLAUDE.md",
 ];
 
+/** A value written into an HTML page (the landing page), as text. */
+function escapeHtml(value) {
+  return value.replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
+  );
+}
+
 for (const file of textFiles) {
   if (!statSync(file, { throwIfNoEntry: false })?.isFile()) continue;
+  const html = file.endsWith(".html");
   let text = readFileSync(file, "utf8");
   for (const [from, to] of replacements) {
-    text = text.replaceAll(from, to);
+    const value = html ? escapeHtml(to) : to;
+    text = text.replaceAll(from, () => value);
   }
   writeFileSync(file, text);
 }
@@ -193,9 +204,6 @@ writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
 if (wranglerRenamed !== null) {
   writeFileSync(wranglerPath, wranglerRenamed);
-}
-if (wranglerPreviewRenamed !== null) {
-  writeFileSync(wranglerPreviewPath, wranglerPreviewRenamed);
 }
 
 const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];
@@ -227,11 +235,28 @@ if (resolved.collects) {
     console.error("nodrift init failed.");
     process.exit(init.status ?? 1);
   }
+  if (d1Bindings.length > 0 && existsSync(DATA_MAP_PATH)) {
+    try {
+      writeFileSync(
+        DATA_MAP_PATH,
+        addD1BindingsToDataMap(readFileSync(DATA_MAP_PATH, "utf8"), d1Bindings),
+      );
+      listedD1Bindings = true;
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  }
 }
 
 console.log(`Initialized project "${displayName}" (${slug}).`);
 if (resolved.collects) {
   console.log("Privacy scaffolding: @didi-build/nodrift init completed.");
+  if (listedD1Bindings) {
+    console.log(
+      `Data map: listed the D1 binding ${d1Bindings.join(", ")} in ${DATA_MAP_PATH}.`,
+    );
+  }
 } else {
   console.log(
     "Privacy scaffolding: skipped (no personal data). To add it later: npx nodrift init, then npm run check.",

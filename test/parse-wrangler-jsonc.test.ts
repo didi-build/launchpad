@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   parseWranglerJsonc,
+  replaceWranglerD1DatabaseName,
   replaceWranglerWorkerName,
+  wranglerD1Bindings,
 } from "../scripts/lib/parse-wrangler-jsonc.mjs";
 
 const TEMPLATE_WRANGLER = `{
@@ -9,7 +11,7 @@ const TEMPLATE_WRANGLER = `{
   "name": "launchpad",
   "compatibility_date": "2026-10-26",
   "assets": {
-    "directory": "./dist/gallery",
+    "directory": "./dist/site",
     "not_found_handling": "single-page-application",
   },
 }`;
@@ -164,5 +166,51 @@ describe("parseWranglerJsonc (unit)", () => {
     const renamed = replaceWranglerWorkerName(text, "launchpad", "smoke-test");
     expect(renamed).toContain("/* worker id */");
     expect(parseWranglerJsonc(renamed).name).toBe("smoke-test");
+  });
+});
+
+describe("the D1 database name and bindings (unit)", () => {
+  const WITH_D1 = `{
+  "name": "launchpad",
+  "d1_databases": [
+    {
+      // the staging database
+      "binding": "DB",
+      "database_name": "launchpad-staging",
+      "migrations_dir": "migrations",
+    },
+  ],
+}`;
+
+  it("renames the one D1 database, keeping comments and formatting", () => {
+    const renamed = replaceWranglerD1DatabaseName(
+      WITH_D1,
+      "launchpad-staging",
+      "my-app-staging",
+    );
+    expect(renamed).toBe(WITH_D1.replace("launchpad-staging", "my-app-staging"));
+    expect(wranglerD1Bindings(parseWranglerJsonc(renamed))).toEqual(["DB"]);
+  });
+
+  it("leaves a config with no D1 database as it is", () => {
+    const text = '{"name":"launchpad"}';
+    expect(replaceWranglerD1DatabaseName(text, "launchpad-staging", "x-staging")).toBe(
+      text,
+    );
+    expect(wranglerD1Bindings(parseWranglerJsonc(text))).toEqual([]);
+  });
+
+  it("refuses a database that is not the template's, or more than one", () => {
+    expect(() =>
+      replaceWranglerD1DatabaseName(
+        WITH_D1.replace("launchpad-staging", "other"),
+        "launchpad-staging",
+        "x-staging",
+      ),
+    ).toThrow(/one D1 database named "launchpad-staging"/);
+    const two = `{"d1_databases": [{"binding": "DB", "database_name": "launchpad-staging"}, {"binding": "B", "database_name": "launchpad-staging"}]}`;
+    expect(() =>
+      replaceWranglerD1DatabaseName(two, "launchpad-staging", "x-staging"),
+    ).toThrow(/one D1 database/);
   });
 });

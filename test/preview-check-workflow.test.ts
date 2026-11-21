@@ -1,12 +1,14 @@
-// Seam: the workflow of CI's preview check for Foreman (unit: repo guard, ADR 0006). Read as YAML
-// and text; nothing runs. Foreman records the conclusion of the job named `preview-check` in
-// `.github/workflows/ci.yml`, from a pull request run on the head commit, as `preview_check`, and
-// merges only with a passing one. So the job is in CI's workflow under that fixed name, runs on
-// same-repository pull requests and on pushes to main with only contents read and no secret,
-// builds and marks the PR's head commit (never the merge ref's), and serves and probes the build
-// with the scripts in `.github/scripts/`. On a push to main only, it keeps the build it probed as
-// the artifact Foreman's staging deploy fetches. The scripts' behaviour is in
-// test/preview-check-scripts.test.ts.
+// Seam: the workflow of CI's preview check for Foreman (unit: repo guard, ADR 0006, ADR 0007).
+// Read as YAML and text; nothing runs. Foreman records the conclusion of the job named
+// `preview-check` in `.github/workflows/ci.yml`, from a pull request run on the head commit, as
+// `preview_check`, and merges only with a passing one. So the job is in CI's workflow under that
+// fixed name, runs on same-repository pull requests and on pushes to main with only contents read
+// and no secret or credential, builds and marks the PR's head commit (never the merge ref's),
+// serves and probes the build with the scripts in `.github/scripts/`, bundles the Worker with
+// Wrangler's dry run, lays out the staging build and runs it locally with a local D1 database to
+// probe it. On a push to main only, it keeps that staging build as the artifact Foreman's staging
+// deploy fetches. The scripts' behaviour is in test/preview-check-scripts.test.ts and
+// test/staging-site.test.ts.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -55,7 +57,11 @@ const jobText = JSON.stringify(job);
 /** The commit the job builds and marks: the PR's head on a pull request, the pushed commit on main. */
 const COMMIT = "${{ github.event.pull_request.head.sha || github.sha }}";
 /** The site root the host serves (wrangler.jsonc) and Vite builds into. */
-const SITE = "dist/gallery";
+const SITE = "dist/site";
+/** Wrangler's dry run writes the Worker's bundle here. */
+const BUNDLE = "dist/worker";
+/** The staging build in Foreman's layout (O-159), which the job probes and keeps. */
+const STAGING = "dist/staging-site";
 
 describe("the preview check's workflow (unit: repo guard, ADR 0006)", () => {
   it("is a job of CI's workflow under its fixed name, and no other job takes the name", () => {
@@ -81,11 +87,12 @@ describe("the preview check's workflow (unit: repo guard, ADR 0006)", () => {
     );
   });
 
-  it("has only contents read and no secret, token or environment", () => {
+  it("has only contents read and no secret, token, Cloudflare credential or environment", () => {
     expect(workflow.permissions).toEqual({});
     expect(job.permissions).toEqual({ contents: "read" });
     expect(job.environment).toBeUndefined();
     expect(jobText).not.toMatch(/secrets\.|github\.token|GITHUB_TOKEN|GH_TOKEN/);
+    expect(jobText).not.toMatch(/CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID|vars\./);
     const checkout = job.steps.find((s) => s.uses?.startsWith("actions/checkout@"));
     expect(checkout?.with?.["persist-credentials"]).toBe(false);
   });
@@ -113,7 +120,7 @@ describe("the preview check's workflow (unit: repo guard, ADR 0006)", () => {
     );
     const wrangler = readFileSync("wrangler.jsonc", "utf8");
     expect(wrangler).toContain(`"directory": "./${SITE}"`);
-    expect(readFileSync("vite.config.ts", "utf8")).toContain(`outDir: "../${SITE}"`);
+    expect(readFileSync("vite.config.ts", "utf8")).toContain(`outDir: "${SITE}"`);
 
     const serveAndProbe = runs[probe]!.split("\n");
     expect(serveAndProbe[0]).toBe("set -euo pipefail");
@@ -124,6 +131,49 @@ describe("the preview check's workflow (unit: repo guard, ADR 0006)", () => {
       'node .github/scripts/preview-check.mjs probe "http://127.0.0.1:${SITE_PORT}" "$COMMIT_SHA"',
     );
     expect(job.env?.SITE_PORT).toMatch(/^\d{4,5}$/);
+  });
+
+  it("then bundles the Worker, lays out the staging build and runs exactly that locally, with a local D1 database", () => {
+    const at = (pattern: RegExp) => runs.findIndex((run) => pattern.test(run));
+    const probe = at(/preview-check\.mjs probe /);
+    const bundle = at(/wrangler deploy --dry-run/);
+    const layout = at(/staging-site\.mjs /);
+    const worker = at(/preview-check\.mjs worker /);
+    expect([bundle, layout, worker].every((i) => i >= 0)).toBe(true);
+    expect(probe < bundle && bundle < layout && layout < worker).toBe(true);
+
+    expect(runs[bundle]).toBe(`npx wrangler deploy --dry-run --outdir ${BUNDLE}`);
+    expect(runs[layout]).toBe(
+      `node .github/scripts/staging-site.mjs --site ${SITE} --worker ${BUNDLE}/index.js --commit "$COMMIT_SHA" --out ${STAGING}`,
+    );
+    const lines = runs[worker]!.split("\n");
+    expect(lines[0]).toBe("set -euo pipefail");
+    expect(lines).toContain("npx wrangler d1 migrations apply DB --local");
+    expect(lines).toContain(
+      `npx wrangler dev ${STAGING}/worker/index.js --no-bundle --assets ${STAGING}/assets --local --ip 127.0.0.1 --port "$WORKER_PORT" --show-interactive-dev-session=false &`,
+    );
+    expect(lines).toContain(
+      'node .github/scripts/preview-check.mjs worker "http://127.0.0.1:${WORKER_PORT}" "$COMMIT_SHA"',
+    );
+    expect(job.env?.WORKER_PORT).toMatch(/^\d{4,5}$/);
+    expect(job.env?.WORKER_PORT).not.toBe(job.env?.SITE_PORT);
+  });
+
+  it("runs Wrangler only locally or as a dry run: nothing is deployed and nothing remote is read", () => {
+    const wranglerLines = runs
+      .flatMap((run) => run.split("\n"))
+      .map((line) => line.trim())
+      .filter((line) => /\bwrangler\b/.test(line));
+    expect(wranglerLines).toHaveLength(3);
+    for (const line of wranglerLines) {
+      expect(line).toMatch(
+        /^npx wrangler (deploy --dry-run|d1 migrations apply DB --local|dev )/,
+      );
+      expect(line).toMatch(/ --dry-run | --local( |$)/);
+      expect(line).not.toMatch(/--remote|--env|-e |--config|-c |--x-/);
+    }
+    expect(job.env?.WRANGLER_SEND_METRICS).toBe("false");
+    expect(job.env?.CLOUDFLARE_CF_FETCH_ENABLED).toBe("false");
   });
 
   it("uses checkout and setup-node as the check job pins them, and the upload pin", () => {
@@ -141,18 +191,18 @@ describe("the staging site artifact (unit: repo guard, ADR 0006)", () => {
   );
   const upload = job.steps[index]!;
 
-  it("keeps the probed build as staging-site, as the last step, after the probe", () => {
+  it("keeps the probed staging build as staging-site, as the last step, after both probes", () => {
     expect(text).toContain(`uses: ${UPLOAD_PIN} # v4.6.2`);
     expect(upload.with?.name).toBe(STAGING_SITE_ARTIFACT);
-    expect(upload.with?.path).toBe(`${SITE}/`);
+    expect(upload.with?.path).toBe(`${STAGING}/`);
     expect(upload.with?.["if-no-files-found"]).toBe("error");
-    // The last step: what is kept is exactly the site the probe served, marker included.
+    // The last step: what is kept is exactly the build the Worker probe ran, marker included.
     expect(index).toBe(job.steps.length - 1);
-    const probe = job.steps.findIndex((s) =>
-      /preview-check\.mjs probe /.test(s.run ?? ""),
-    );
-    expect(probe).toBeGreaterThan(0);
-    expect(probe).toBeLessThan(index);
+    for (const pattern of [/preview-check\.mjs probe /, /preview-check\.mjs worker /]) {
+      const probe = job.steps.findIndex((s) => pattern.test(s.run ?? ""));
+      expect(probe).toBeGreaterThan(0);
+      expect(probe).toBeLessThan(index);
+    }
     expect(COMMIT_MARKER_FILE).toBe("foreman-commit.txt");
   });
 

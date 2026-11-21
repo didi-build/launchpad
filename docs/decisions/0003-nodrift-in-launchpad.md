@@ -54,3 +54,9 @@ This is the documented exception to the bootstrap runbook table row that forbids
 - Derived repos need Node `>=22.13.0` when nodrift check runs.
 - Opt-out repos set `LAUNCHPAD_COLLECTS_PERSONAL_DATA=false` or `--no-personal-data`; they can add scaffolding later with `npx nodrift init`.
 - Bootstrap runbook token-job table keeps the historical no unrestricted-`npm-ci` rule; nodrift uses `npm ci --ignore-scripts` without token in the child env, as in section 1.
+
+## Amendment (2026-11-21): the token job runs no install, and the D1 binding is listed (Foreman's D-358 lock 1, ADR 0118)
+
+Section 1 describes the single Bootstrap job of 2026-10-23. Now `npm ci --ignore-scripts`, `init-project` and `nodrift init` run in their own job with no token at all, and hand their changes over as a patch; the job with the token runs no npm, applies the patch with `git apply` and commits with hooks off ([ADR 0001's amendment](./0001-template-bootstrap.md), [the runbook](../runbooks/bootstrap.md)). Bootstrap's `collects_personal_data` input, when given, takes the place of the variable of section 2; the default stays yes.
+
+The template's Worker has a D1 binding, `DB` ([ADR 0007](./0007-worker-backend-and-staging-build.md)). nodrift's Check 2 requires every D1 binding on an `other_items` entry with `binding:`, and `nodrift init` writes `other_items: []`, so `init-project` adds an operational entry for `DB` (the database as a store; its tables go under `d1_tables` as migrations add them). A personal-data project's `npm run check` passes right after Bootstrap. `migrations/*.sql` is the folder Check 1 replays, empty at first.
