@@ -1,6 +1,6 @@
 # 0004. Add a per-repo component gallery on Cloudflare Workers
 
-- **Status:** accepted (partially superseded by [0005](./0005-preview-worker-isolation.md))
+- **Status:** accepted (partially superseded by [0005](./0005-preview-worker-isolation.md); point 5, PR previews, superseded by [0007](./0007-worker-backend-and-staging-build.md))
 - **Date:** 2026-10-26
 
 ## Context
@@ -32,3 +32,7 @@ New repos from Launchpad need a shared place to build UI from approved specs, pr
 ## Note (2026-10-28)
 
 Spec files now live under `design/<area>/<feature>/spec.md` with a `design/README.md` index (Didi Build layout convention, same as we-met). The decision bullets above still describe the original `specs/` path; new and derived repos use `design/` instead.
+
+## Amendment (2026-11-21): the gallery beside a landing page and a Worker
+
+Hosted pull request previews are removed (Foreman's D-446, [ADR 0007](./0007-worker-backend-and-staging-build.md)); CI's `preview-check` job builds and serves the gallery on CI's own machine instead ([ADR 0006](./0006-foreman-preview-check.md)). The gallery is no longer the whole site: Vite builds the project's landing page at `/` and the gallery at `/gallery` (`gallery/index.html`) into `dist/site`, and the same Worker runs the project's backend at `/api`. `init-project` still renames the Worker to the slug, and also names its D1 database `<slug>-staging`.

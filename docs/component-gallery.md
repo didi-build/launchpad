@@ -1,6 +1,6 @@
 # Component gallery
 
-Every Launchpad-derived repo includes a **component gallery**: a `/gallery` route on the Cloudflare Worker preview that renders each registered component with its variants and props. Use it while implementing UI from approved specs and while reviewing PRs.
+Every Launchpad-derived repo includes a **component gallery**: a page at `/gallery`, beside the project's landing page at `/`, that renders each registered component with its variants and props. Use it while implementing UI from approved specs and while reviewing PRs.
 
 ## Who edits what
 
@@ -16,11 +16,11 @@ For Linear status names and handoffs (design ticket, developer counterpart, Diad
 
 ## Directories
 
-| Path                       | Purpose                                                                                |
-| -------------------------- | -------------------------------------------------------------------------------------- |
-| `design/<area>/<feature>/` | Design specs (`spec.md` per feature); index in [design/README.md](../design/README.md) |
-| `components/`              | Gallery components and `*.gallery.ts` metadata (variants, props, spec link)            |
-| `gallery/`                 | Gallery SPA (registry, layout, styles); not the app under `src/`                       |
+| Path                       | Purpose                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `design/<area>/<feature>/` | Design specs (`spec.md` per feature); index in [design/README.md](../design/README.md)  |
+| `components/`              | Gallery components and `*.gallery.ts` metadata (variants, props, spec link)             |
+| `gallery/`                 | Gallery app at `/gallery` (`gallery/index.html`, registry, layout, styles); not the app |
 
 Gallery metadata may import spec markdown at build time for display; specs remain designer-only at edit time.
 
@@ -30,16 +30,16 @@ Gallery metadata may import spec markdown at build time for display; specs remai
 2. Implement the component under `components/<name>/`.
 3. Add `<name>.gallery.ts` exporting a `GalleryEntry` (see `components/example-button/example-button.gallery.ts`).
 4. Register it in `gallery/registry.ts`.
-5. Run `npm run build` and open `/gallery` locally with `npm run dev:gallery` or on a PR preview.
+5. Run `npm run build` and open `/gallery/` locally with `npm run dev:gallery`.
 
 ## Local development
 
 ```bash
 npm install
-npm run dev:gallery   # Vite dev server with /gallery
-npm run build         # Production asset build (also runs in npm run check)
+npm run dev:gallery   # Vite dev server: the landing page at /, the gallery at /gallery/
+npm run build         # Production asset build into dist/site (also runs in npm run check)
 ```
 
-Same-repo pull requests get a **gallery preview** comment from CI. When repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID` are set, the comment links to `/gallery` on the preview Worker (`launchpad-preview` in the template; `<slug>-preview` after `init-project`). The preview token must be **Workers Scripts Edit** only on that preview Worker; do not grant D1 or R2 Edit because PR-branch code can reach this token. Without those secrets, the Preview job is **neutral** and the comment explains that previews are not configured (expected for a fresh template until you opt in). Fork PRs never run preview deploy.
+Pull requests get no hosted preview (Foreman's D-446). CI's `preview-check` job builds the site on CI's own machine, serves it on 127.0.0.1 and checks that the gallery loads and serves the head commit; see the [deploy runbook](./runbooks/deploy.md).
 
-See [ADR 0004](./decisions/0004-component-gallery.md) for hosting choices and [ADR 0005](./decisions/0005-preview-worker-isolation.md) for preview Worker isolation.
+See [ADR 0004](./decisions/0004-component-gallery.md) for hosting choices and [ADR 0007](./decisions/0007-worker-backend-and-staging-build.md) for the landing page and the Worker beside the gallery. [ADR 0005](./decisions/0005-preview-worker-isolation.md) (preview Worker isolation) is superseded.

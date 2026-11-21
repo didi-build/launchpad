@@ -23,7 +23,13 @@ function listFiles(path) {
   return out;
 }
 
-const files = ["README.md", "AGENTS.md", "package.json", ...listFiles("docs")];
+const files = [
+  "README.md",
+  "AGENTS.md",
+  "package.json",
+  "index.html",
+  ...listFiles("docs"),
+].filter((file) => statSync(file, { throwIfNoEntry: false })?.isFile());
 
 const offenders = [];
 for (const file of files) {

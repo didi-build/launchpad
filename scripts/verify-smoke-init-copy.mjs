@@ -65,25 +65,37 @@ if (wrangler.name === "launchpad") {
   process.exit(1);
 }
 
-const previewConfigPath = "wrangler.preview.jsonc";
-if (existsSync(previewConfigPath)) {
-  const previewWrangler = parseWranglerJsonc(readFileSync(previewConfigPath, "utf8"));
-  const expectedPreview = `${slug}-preview`;
-  if (previewWrangler.name !== expectedPreview) {
-    console.error("wrangler.preview.jsonc name mismatch:", previewWrangler.name);
-    process.exit(1);
-  }
-  if (previewWrangler.name === "launchpad-preview") {
-    console.error(
-      "wrangler.preview.jsonc still uses template preview worker name launchpad-preview",
-    );
-    process.exit(1);
-  }
+const databases = Array.isArray(wrangler.d1_databases) ? wrangler.d1_databases : [];
+if (databases.length !== 1 || databases[0].database_name !== `${slug}-staging`) {
+  console.error(
+    "wrangler.jsonc D1 database_name mismatch:",
+    JSON.stringify(databases.map((d) => d.database_name)),
+  );
+  process.exit(1);
+}
+
+const landing = readFileSync("index.html", "utf8");
+const purposeAsHtml = purpose.replace(
+  /[&<>"']/g,
+  (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch],
+);
+if (landing.includes("{{") || !landing.includes(purposeAsHtml)) {
+  console.error(
+    "index.html does not show the project's purpose, or keeps a placeholder",
+  );
+  process.exit(1);
 }
 
 const hasNodrift = existsSync(".nodrift/manifest.json");
 if (expectNodrift === "yes" && !hasNodrift) {
   console.error("expected nodrift manifest after --personal-data");
+  process.exit(1);
+}
+if (
+  expectNodrift === "yes" &&
+  !/^\s+binding: DB$/m.test(readFileSync("docs/privacy/data-map.yml", "utf8"))
+) {
+  console.error("expected the DB binding in docs/privacy/data-map.yml's other_items");
   process.exit(1);
 }
 if (expectNodrift === "no" && hasNodrift) {
