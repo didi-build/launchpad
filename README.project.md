@@ -13,20 +13,22 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 
 ## Layout
 
-| Path                                                                                            | Why it exists                                                                                                                               |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LICENSE`                                                                                       | Project license (from `LICENSE.project` at init)                                                                                            |
-| `LICENSES/launchpad-MIT.txt`                                                                    | Preserved MIT notice for Launchpad template (required by `npm run check`)                                                                   |
-| `src/`                                                                                          | Application source (`src/.gitkeep` until you add code)                                                                                      |
-| `design/`, `components/`, `gallery/`                                                            | Designer specs (`design/<area>/<feature>/`), gallery UI, and `/gallery` route; see [docs/component-gallery.md](./docs/component-gallery.md) |
-| `test/`                                                                                         | Vitest tests (script and integration tests under `test/`)                                                                                   |
-| `docs/`                                                                                         | Architecture, decisions, runbooks; see [docs/README.md](./docs/README.md)                                                                   |
-| `AGENTS.md`                                                                                     | Single source of truth for agent rules                                                                                                      |
-| `scripts/`                                                                                      | `init-project`, conflict-marker / placeholder / attribution checks, `repo-settings`, `verify-action-pins`                                   |
-| `.github/workflows/ci.yml`, `preview.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`, Foreman's `preview-check`), PR gallery preview, Dependabot config, and green Dependabot auto-merge                     |
-| `.github/scripts/`                                                                              | The preview check's scripts; Foreman reads that job's result, see [ADR 0006](./docs/decisions/0006-foreman-preview-check.md)                |
-| `wrangler.jsonc`, `wrangler.preview.jsonc`                                                      | Production Worker vs PR preview Worker (`<slug>` and `<slug>-preview`); previews use `CLOUDFLARE_API_TOKEN_PREVIEW` only                    |
-| `.husky/`                                                                                       | Fast pre-commit checks + secret scan                                                                                                        |
+| Path                                                                             | Why it exists                                                                                                                               |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LICENSE`                                                                        | Project license (from `LICENSE.project` at init)                                                                                            |
+| `LICENSES/launchpad-MIT.txt`                                                     | Preserved MIT notice for Launchpad template (required by `npm run check`)                                                                   |
+| `src/`                                                                           | Application source; `src/worker/` is the Worker, the backend at `/api` ([deploy runbook](./docs/runbooks/deploy.md))                        |
+| `index.html`                                                                     | The landing page at `/` (a placeholder with the project's name and purpose until you replace it)                                            |
+| `migrations/`                                                                    | D1 migrations for the Worker's `DB` binding, applied by Foreman on staging                                                                  |
+| `design/`, `components/`, `gallery/`                                             | Designer specs (`design/<area>/<feature>/`), gallery UI, and `/gallery` route; see [docs/component-gallery.md](./docs/component-gallery.md) |
+| `test/`                                                                          | Vitest tests (script and integration tests under `test/`)                                                                                   |
+| `docs/`                                                                          | Architecture, decisions, runbooks; see [docs/README.md](./docs/README.md)                                                                   |
+| `AGENTS.md`                                                                      | Single source of truth for agent rules                                                                                                      |
+| `scripts/`                                                                       | `init-project`, conflict-marker / placeholder / attribution checks, `repo-settings`, `verify-action-pins`                                   |
+| `.github/workflows/ci.yml`, `dependabot-automerge.yml`, `.github/dependabot.yml` | CI (`npm run check`, Foreman's `preview-check`, the `staging-site` build), Dependabot config, and green Dependabot auto-merge               |
+| `.github/scripts/`                                                               | The scripts the workflows run (preview check, staging build, Bootstrap); see [ADR 0006](./docs/decisions/0006-foreman-preview-check.md)     |
+| `wrangler.jsonc`                                                                 | The Worker (`<slug>`): assets from `dist/site`, `/api` to the Worker, the D1 binding `DB` (`<slug>-staging`); no preview Worker             |
+| `.husky/`                                                                        | Fast pre-commit checks + secret scan                                                                                                        |
 
 ## Commands
 
@@ -34,6 +36,8 @@ Created from [Launchpad](https://github.com/didi-build/launchpad) by Didi Build 
 npm install          # install deps and git hooks (prepare)
 npm run check        # conflict markers, format, lint, typecheck, test, secrets, placeholders, attribution
 npm run test         # vitest
+npm run build        # the site (landing page and gallery) into dist/site
+npx wrangler dev     # the Worker and the built site on localhost, with a local D1 database
 npm run test:watch   # vitest watch mode
 npm run repo-settings   # dry-run / --apply / --verify GitHub repo settings
 npm run verify-action-pins   # verify each pinned action SHA matches its # vX.Y.Z comment
@@ -48,6 +52,8 @@ As tests grow, consider moving `npm run test` to a **pre-push** hook (or running
 ## Environment variables
 
 Copy [`.env.example`](./.env.example) to `.env` for local use. Document each name in README or `docs/architecture/`; document names only in `.env.example`; never commit values.
+
+The Worker's secrets are listed by name only in `src/worker/required-secrets.json`. Their values go on the staging Worker through Foreman's **Set project secret** form, and in `.dev.vars` (git-ignored) for `wrangler dev`; see the [deploy runbook](./docs/runbooks/deploy.md).
 
 ## Adding checks or tools
 

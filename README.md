@@ -7,7 +7,7 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 ## Use this template
 
 1. On GitHub, click **Use this template** and create your repository.
-2. Wait for the **Bootstrap** workflow on `main` to finish (runs `init-project`, commits, and applies [repo settings](./scripts/repo-settings.mjs)). See [docs/runbooks/bootstrap.md](./docs/runbooks/bootstrap.md).
+2. Wait for the **Bootstrap** workflow on `main` to finish (runs `init-project`, commits, and applies [repo settings](./.github/scripts/bootstrap-settings.mjs)). See [docs/runbooks/bootstrap.md](./docs/runbooks/bootstrap.md). Foreman's New project form starts it with the project's display name and personal-data answer as inputs.
 3. Clone your new repo and follow [docs/new-project-checklist.md](./docs/new-project-checklist.md) for anything Bootstrap did not cover.
 4. Replace any remaining Launchpad-specific wording in docs as needed.
 
@@ -15,35 +15,39 @@ This repository **is** the template: it stays green with `launchpadTemplate: tru
 
 ## Layout (template)
 
-| Path                                         | Purpose                                                                                                                                            |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LICENSE`                                    | MIT license for the Launchpad template                                                                                                             |
-| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`                                                                                          |
-| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos)                                                                                |
-| `README.project.md`                          | Project README template swapped in by `init-project`                                                                                               |
-| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                                                                                                |
-| `design/`, `components/`, `gallery/`         | Designer specs (`design/<area>/<feature>/`), gallery components, and `/gallery` SPA (see [docs/component-gallery.md](./docs/component-gallery.md)) |
-| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                                                                                                |
-| `.github/workflows/preview.yml`              | PR gallery preview on Cloudflare Workers (same-repo PRs)                                                                                           |
-| `scripts/init-project.mjs`                   | Placeholder replacement and package rename                                                                                                         |
-| `.github/workflows/bootstrap.yml`            | Auto `init-project` + repo settings on template create / retry                                                                                     |
-| `.github/workflows/ci.yml`                   | PR/push CI and test-results comment                                                                                                                |
-| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)                                                                                             |
-| `scripts/repo-settings.mjs`                  | Recommended branch protection via `gh`                                                                                                             |
+| Path                                         | Purpose                                                                                                                                                       |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LICENSE`                                    | MIT license for the Launchpad template                                                                                                                        |
+| `LICENSE.project`                            | Proprietary license template swapped in by `init-project`                                                                                                     |
+| `LICENSES/launchpad-MIT.txt`                 | Preserved MIT notice (required by `npm run check` in derived repos)                                                                                           |
+| `README.project.md`                          | Project README template swapped in by `init-project`                                                                                                          |
+| `src/`, `test/`                              | Minimal TypeScript + Vitest example                                                                                                                           |
+| `index.html`                                 | The project's placeholder landing page at `/`, with its display name and purpose                                                                              |
+| `src/worker/`                                | The Worker: the backend at `/api` (`/api/health`), and `required-secrets.json`, the names of the secrets it needs                                             |
+| `migrations/`                                | D1 migrations for the `DB` binding, empty at first                                                                                                            |
+| `wrangler.jsonc`                             | The Worker (`<slug>`), its assets (`dist/site`), `/api` routing and the D1 binding (`<slug>-staging`, placeholder id)                                         |
+| `design/`, `components/`, `gallery/`         | Designer specs (`design/<area>/<feature>/`), gallery components, and the gallery at `/gallery` (see [docs/component-gallery.md](./docs/component-gallery.md)) |
+| `docs/`                                      | Architecture, ADRs, runbooks, new-project checklist                                                                                                           |
+| `scripts/init-project.mjs`                   | Placeholder replacement, package, Worker and database rename                                                                                                  |
+| `.github/workflows/bootstrap.yml`            | Auto `init-project` + repo settings on template create / retry; only `.github/scripts/` receives the token                                                    |
+| `.github/workflows/ci.yml`                   | PR/push CI, Foreman's `preview-check` (the site and the Worker run on CI's own machine), and the `staging-site` build                                         |
+| `.github/workflows/dependabot-automerge.yml` | Merge green Dependabot PRs (only automation exception)                                                                                                        |
+| `.github/scripts/`                           | The scripts those workflows run: Bootstrap's protected steps, the preview check and the staging build's layout                                                |
 
 ## Maintainer commands
 
 ```bash
 npm install
 npm run check        # full gate (template skips placeholder check)
-npm run dev:gallery  # local component gallery (Vite)
-npm run build        # build gallery assets for Workers
+npm run dev:gallery  # local landing page and component gallery (Vite)
+npm run build        # build the site (landing page and gallery) for Workers
+npx wrangler dev     # run the Worker and the built site locally, with a local D1 database
 npm run init-project -- <slug> "<name>" ["purpose"]   # test locally only
 ```
 
-### PR gallery preview (optional)
+### The Worker, the database and secrets
 
-Same-repo pull requests run [.github/workflows/preview.yml](./.github/workflows/preview.yml). Previews deploy to a dedicated Worker (`launchpad-preview` in this template; `<slug>-preview` after `init-project`) via `wrangler.preview.jsonc`, not the production Worker in `wrangler.jsonc`. To enable previews, add repository secrets `CLOUDFLARE_API_TOKEN_PREVIEW` and `CLOUDFLARE_ACCOUNT_ID`. The preview token must be **Workers Scripts Edit** only on the preview Worker; do not grant D1 or R2 Edit because pull request branch code can reach this token. Until secrets exist, the Preview job ends neutral and updates one PR comment that previews are not configured (expected for a new template). Fork PRs skip preview deploy.
+Every project is one Cloudflare Worker ([ADR 0007](./docs/decisions/0007-worker-backend-and-staging-build.md)): the landing page at `/` and the gallery at `/gallery` are static assets, and `src/worker/index.ts` answers `/api` (`/api/health` answers `{"status":"ok"}`). Its D1 database is bound as `DB`, with migrations in `migrations/`; the repository never holds the database's id. Secrets are listed by name only, in `src/worker/required-secrets.json`, and their values are set through Foreman's **Set project secret** form. There are no hosted pull request previews: CI's `preview-check` job builds the site, runs the Worker locally with a local database, and keeps the staging build Foreman deploys to `<slug>-staging`. See [docs/runbooks/deploy.md](./docs/runbooks/deploy.md).
 
 ## Contributing to Launchpad
 

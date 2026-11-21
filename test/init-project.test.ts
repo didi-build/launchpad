@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -90,10 +90,6 @@ function seedLaunchpadDir(root: string) {
   writeFileSync(
     join(root, "wrangler.jsonc"),
     '{"name":"launchpad","compatibility_date":"2026-10-26"}\n',
-  );
-  writeFileSync(
-    join(root, "wrangler.preview.jsonc"),
-    '{"name":"launchpad-preview","compatibility_date":"2026-10-26","workers_dev":true,"preview_urls":true}\n',
   );
 }
 
@@ -189,13 +185,6 @@ describe("init-project (unit)", () => {
     expect(wranglerRaw).not.toContain('"launchpad"');
     const wrangler = JSON.parse(wranglerRaw) as { name: string };
     expect(wrangler.name).toBe("my-app");
-    const previewWranglerRaw = readFileSync(
-      join(dir, "wrangler.preview.jsonc"),
-      "utf8",
-    );
-    expect(previewWranglerRaw).not.toContain('"launchpad-preview"');
-    const previewWrangler = JSON.parse(previewWranglerRaw) as { name: string };
-    expect(previewWrangler.name).toBe("my-app-preview");
   });
 
   it("does not create nodrift scaffolding with --no-personal-data", () => {
@@ -288,6 +277,108 @@ describe("init-project (unit)", () => {
     writeFileSync(join(dir, "README.md"), "# Custom README\n");
     runInitFails(dir, ["my-app", "My App"]);
     expect(readFileSync(join(dir, "README.md"), "utf8")).toBe("# Custom README\n");
+  });
+});
+
+const WRANGLER_WITH_D1 = `{
+  // The template's Worker and its staging database
+  "name": "launchpad",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-26",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "launchpad-staging",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+}
+`;
+
+describe("init-project and the Worker's D1 database (integration: real nodrift)", () => {
+  it("names the Worker <slug> and its D1 database <slug>-staging, keeping the comments", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    writeFileSync(join(dir, "wrangler.jsonc"), WRANGLER_WITH_D1);
+    runInit(dir, ["my-app", "My App", "Purpose", "--no-personal-data"]);
+    const text = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
+    expect(text).toBe(
+      WRANGLER_WITH_D1.replace('"launchpad"', '"my-app"').replace(
+        '"launchpad-staging"',
+        '"my-app-staging"',
+      ),
+    );
+    expect(text).not.toContain("launchpad");
+  });
+
+  it("leaves everything as it was when the D1 database is not the template's", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    const other = WRANGLER_WITH_D1.replace("launchpad-staging", "something-else");
+    writeFileSync(join(dir, "wrangler.jsonc"), other);
+    runInitFails(dir, ["my-app", "My App", "--no-personal-data"]);
+    expect(readFileSync(join(dir, "wrangler.jsonc"), "utf8")).toBe(other);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+  });
+
+  it("lists the DB binding in the data map after nodrift init, so nodrift check passes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
+    writeFileSync(join(dir, "wrangler.jsonc"), WRANGLER_WITH_D1);
+    mkdirSync(join(dir, "migrations"));
+    writeFileSync(join(dir, "migrations/.gitkeep"), "");
+    const out = runInit(dir, ["my-app", "My App", "Purpose", "--personal-data"]);
+    expect(out).toContain("listed the D1 binding DB in docs/privacy/data-map.yml");
+    const map = readFileSync(join(dir, "docs/privacy/data-map.yml"), "utf8");
+    expect(map).toContain("other_items:\n  - id: d1-db\n    binding: DB\n");
+    expect(map).not.toContain("other_items: []");
+    const check = spawnSync(
+      process.execPath,
+      [join(dir, "node_modules/@didi-build/nodrift/dist/cli.js"), "check"],
+      { cwd: dir, encoding: "utf8" },
+    );
+    expect(check.status, check.stdout + check.stderr).toBe(0);
+
+    // Without the entry, nodrift's Check 2 fails on the DB binding: the entry is what makes it pass.
+    writeFileSync(
+      join(dir, "docs/privacy/data-map.yml"),
+      "schema_version: 1\nd1_tables: {}\nother_items: []\n",
+    );
+    const without = spawnSync(
+      process.execPath,
+      [join(dir, "node_modules/@didi-build/nodrift/dist/cli.js"), "check"],
+      { cwd: dir, encoding: "utf8" },
+    );
+    expect(without.status).toBe(1);
+    expect(without.stdout + without.stderr).toContain("DB");
+  });
+});
+
+describe("init-project and the landing page (unit)", () => {
+  it("writes the display name and the purpose into index.html, escaped as HTML text", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    writeFileSync(
+      join(dir, "index.html"),
+      '<title>{{PROJECT_NAME}}</title><meta content="{{PROJECT_PURPOSE}}"><h1>{{PROJECT_NAME}}</h1>\n',
+    );
+    runInit(dir, [
+      "my-app",
+      "Café & <Co>",
+      'Plans "trips" for $& friends',
+      "--no-personal-data",
+    ]);
+    expect(readFileSync(join(dir, "index.html"), "utf8")).toBe(
+      "<title>Café &amp; &lt;Co&gt;</title>" +
+        '<meta content="Plans &quot;trips&quot; for $&amp; friends">' +
+        "<h1>Café &amp; &lt;Co&gt;</h1>\n",
+    );
+    // Markdown keeps the text as it is, `$&` included.
+    expect(readFileSync(join(dir, "README.md"), "utf8")).toContain(
+      '# Café & <Co>\n\nPlans "trips" for $& friends',
+    );
   });
 });
 

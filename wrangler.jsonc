@@ -1,11 +1,26 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Foreman deploys staging itself as `<slug>-staging` and ignores `name`; it takes only the
+  // compatibility date and flags from this file (docs/runbooks/deploy.md).
   "name": "launchpad",
+  "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-26",
   "assets": {
-    "directory": "./dist/gallery",
+    "directory": "./dist/site",
     "not_found_handling": "single-page-application",
+    // Only /api runs the Worker; pages and files stay free asset requests.
+    "run_worker_first": ["/api/*"],
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "launchpad-staging",
+      // A placeholder for local runs (`wrangler dev`, a local SQLite file). The real id is never
+      // committed: Foreman carries the staging Worker's DB binding over on each deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
   "observability": {
     "enabled": true,
   },

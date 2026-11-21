@@ -26,3 +26,7 @@ Foreman, the factory that builds projects made from this template, merges a pull
 - Renaming the job, moving it out of `ci.yml` or changing the marker path stops Foreman from merging until Foreman is changed to match.
 - A project made from the template before this decision needs the same change added in its own pull request.
 - ADR 0005's hosted preview is unchanged by this decision. Whether to drop it, as Foreman did for its own repository, is a separate decision.
+
+## Amendment (2026-11-21): the Worker run and the staging build's layout
+
+The site is now built into `dist/site`, with the gallery at `/gallery` beside a landing page, and the template has a Worker ([ADR 0007](./0007-worker-backend-and-staging-build.md)). After the probe of point 1, the job bundles the Worker with Wrangler's dry run, lays the staging build out with `.github/scripts/staging-site.mjs`, runs exactly that build locally with `wrangler dev` and a local D1 database, and probes `/`, the commit marker and `/api/health` (`preview-check.mjs worker`). Point 3's `staging-site` artifact keeps that build in Foreman's layout for a build with a Worker: `foreman-deploy.json`, `assets/`, `worker/index.js` and `migrations/`. Still no secret and no credential. ADR 0005's hosted preview is removed (Foreman's D-446).
