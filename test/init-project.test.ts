@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -8,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -160,6 +161,7 @@ describe("init-project (unit)", () => {
   it("moves README and LICENSE templates on success", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
     runInit(dir, ["my-app", "My App", "Purpose", "Acme Corp", "--no-personal-data"]);
     expect(existsSync(join(dir, "README.project.md"))).toBe(false);
     expect(existsSync(join(dir, "LICENSE.project"))).toBe(false);
@@ -270,9 +272,30 @@ describe("init-project (unit)", () => {
     expect(existsSync(join(dir, "README.project.md"))).toBe(true);
   });
 
+  it("refuses before writing anything when Prettier is not installed (npm ci not run)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
+    seedLaunchpadDir(dir);
+    const pkgBefore = readFileSync(join(dir, "package.json"));
+    const wranglerBefore = readFileSync(join(dir, "wrangler.jsonc"));
+    const run = spawnSync(
+      process.execPath,
+      [initScript, "my-app", "My App", "Purpose", "--no-personal-data"],
+      { cwd: dir, encoding: "utf8", env: initEnv() },
+    );
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("Prettier is not installed");
+    expect(run.stderr).toContain("npm ci");
+    expect(readFileSync(join(dir, "package.json"))).toEqual(pkgBefore);
+    expect(readFileSync(join(dir, "wrangler.jsonc"))).toEqual(wranglerBefore);
+    expect(existsSync(join(dir, "README.project.md"))).toBe(true);
+    expect(existsSync(join(dir, "README.md"))).toBe(false);
+    expect(existsSync(join(dir, "src/greet.ts"))).toBe(true);
+  });
+
   it("does not clobber README on re-run", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
     runInit(dir, ["my-app", "My App", "--no-personal-data"]);
     writeFileSync(join(dir, "README.md"), "# Custom README\n");
     runInitFails(dir, ["my-app", "My App"]);
@@ -300,6 +323,7 @@ describe("init-project and the Worker's D1 database (integration: real nodrift)"
   it("names the Worker <slug> and its D1 database <slug>-staging, keeping the comments", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
     writeFileSync(join(dir, "wrangler.jsonc"), WRANGLER_WITH_D1);
     runInit(dir, ["my-app", "My App", "Purpose", "--no-personal-data"]);
     const text = readFileSync(join(dir, "wrangler.jsonc"), "utf8");
@@ -356,31 +380,116 @@ describe("init-project and the Worker's D1 database (integration: real nodrift)"
   });
 });
 
+/** The description meta tag's `content` in `html`, as a browser reads it. */
+function descriptionContent(html: string) {
+  const match = html.match(/\sname="description"\s+content=(?:"([^"]*)"|'([^']*)')/);
+  const raw = match?.[1] ?? match?.[2];
+  return raw
+    ?.replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+}
+
 describe("init-project and the landing page (unit)", () => {
   it("writes the display name and the purpose into index.html, escaped as HTML text", () => {
     const dir = mkdtempSync(join(tmpdir(), "launchpad-init-"));
     seedLaunchpadDir(dir);
+    linkWorkspaceNodeModules(dir);
     writeFileSync(
       join(dir, "index.html"),
-      '<title>{{PROJECT_NAME}}</title><meta content="{{PROJECT_PURPOSE}}"><h1>{{PROJECT_NAME}}</h1>\n',
+      [
+        "<!doctype html>",
+        '<html lang="en">',
+        "  <head>",
+        '    <meta name="description" content="{{PROJECT_PURPOSE}}" />',
+        "    <title>{{PROJECT_NAME}}</title>",
+        "  </head>",
+        "  <body>",
+        "    <h1>{{PROJECT_NAME}}</h1>",
+        "  </body>",
+        "</html>",
+        "",
+      ].join("\n"),
     );
-    runInit(dir, [
-      "my-app",
-      "Café & <Co>",
-      'Plans "trips" for $& friends',
-      "--no-personal-data",
-    ]);
-    expect(readFileSync(join(dir, "index.html"), "utf8")).toBe(
-      "<title>Café &amp; &lt;Co&gt;</title>" +
-        '<meta content="Plans &quot;trips&quot; for $&amp; friends">' +
-        "<h1>Café &amp; &lt;Co&gt;</h1>\n",
-    );
+    const purpose = 'Plans "trips" for $& friends';
+    runInit(dir, ["my-app", "Café & <Co>", purpose, "--no-personal-data"]);
+    const html = readFileSync(join(dir, "index.html"), "utf8");
+    expect(html).toContain("<title>Café &amp; &lt;Co&gt;</title>");
+    expect(html).toContain("<h1>Café &amp; &lt;Co&gt;</h1>");
+    expect(html).not.toContain("<Co>");
+    // Prettier may pick the attribute's quotes; the value a browser reads is the purpose.
+    expect(descriptionContent(html)).toBe(purpose);
+    expect(html).toContain("$&amp; friends");
     // Markdown keeps the text as it is, `$&` included.
     expect(readFileSync(join(dir, "README.md"), "utf8")).toContain(
-      '# Café & <Co>\n\nPlans "trips" for $& friends',
+      `# Café & <Co>\n\n${purpose}`,
     );
   });
 });
+
+// The longest display name and purpose Foreman's New project form takes (60 and 200 characters,
+// its project file's rules) and the longest slug a Worker name allows (63). A fixed layout in the
+// templates cannot suit every value: the first project the form made failed CI's format check on
+// index.html's description line. Init formats what it writes with the project's Prettier instead.
+const LONG_SLUG = "a-project-slug-as-long-as-a-cloudflare-worker-name-may-be-63-ch";
+const LONG_NAME = "Café & <Co> planner: a display name at the sixty-char limit!";
+const LONG_PURPOSE =
+  'Plans "trips" & shared costs for groups of friends, with a landing page, a Worker backend and a D1 database; this purpose is exactly as long as the New project form allows, to test every line\'s width.';
+
+/** This checkout's files as a new repository gets them, without installed or built ones. */
+function copyTemplate(dir: string) {
+  const skip = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "coverage",
+    "test-results",
+    ".wrangler",
+  ]);
+  cpSync(workspaceRoot, dir, {
+    recursive: true,
+    filter: (src) => {
+      const rel = relative(workspaceRoot, src);
+      return rel === "" || !skip.has(rel.split(sep)[0]);
+    },
+  });
+  linkWorkspaceNodeModules(dir);
+}
+
+describe.skipIf(!isLaunchpadTemplateRepo())(
+  "init-project's files pass Prettier, whatever the display name and purpose (integration: this template, real Prettier and nodrift)",
+  () => {
+    it("holds the inputs at their longest", () => {
+      expect([LONG_SLUG.length, LONG_NAME.length, LONG_PURPOSE.length]).toEqual([
+        63, 60, 200,
+      ]);
+    });
+
+    for (const flag of ["--no-personal-data", "--personal-data"]) {
+      it(`passes prettier --check after init ${flag}`, { timeout: 60_000 }, () => {
+        const dir = mkdtempSync(join(tmpdir(), "launchpad-init-format-"));
+        copyTemplate(dir);
+        runInit(dir, [LONG_SLUG, LONG_NAME, LONG_PURPOSE, flag]);
+        const html = readFileSync(join(dir, "index.html"), "utf8");
+        expect(descriptionContent(html)).toBe(LONG_PURPOSE);
+        // Escaped, the name is too long for one line: Prettier wraps <title>, and a browser
+        // collapses the white space it adds.
+        const title = html.match(/<title>([\s\S]*?)<\/title>/)?.[1];
+        expect(title?.replace(/\s+/g, " ").trim()).toBe(
+          "Café &amp; &lt;Co&gt; planner: a display name at the sixty-char limit!",
+        );
+        const check = spawnSync(
+          process.execPath,
+          [join(dir, "node_modules/prettier/bin/prettier.cjs"), "--check", "."],
+          { cwd: dir, encoding: "utf8" },
+        );
+        expect(check.status, check.stdout + check.stderr).toBe(0);
+      });
+    }
+  },
+);
 
 function isLaunchpadTemplateRepo() {
   try {

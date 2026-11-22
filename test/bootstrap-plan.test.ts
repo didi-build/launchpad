@@ -2,7 +2,8 @@
 // lock 1, O-113), run with node as the workflow runs it, in a throwaway git repository, against a
 // fake GitHub API (no network). It decides whether the repository still needs setting up, from
 // the template files and from GitHub's protection flag on the default branch, and takes the two
-// optional inputs Foreman's New project form sends (its ADR 0118 appendix E item 1).
+// optional inputs Foreman's New project form sends (its ADR 0118 appendix E item 1). In didi-build
+// it leaves setup to that form's run: a push there never sets a repository up.
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   INVALID_COLLECTS_PERSONAL_DATA_INPUT_MESSAGE,
   INVALID_DISPLAY_NAME_INPUT_MESSAGE,
+  PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE,
   parseCollectsPersonalDataInput,
   parseDisplayNameInput,
   readBranchProtected,
@@ -70,6 +72,19 @@ const didiBuild = {
   DEFAULT_BRANCH: "main",
   GITHUB_TOKEN: "fake-actions-read-token",
 };
+// Outside didi-build, where a push still sets a repository up with a repository secret.
+const acmeCorp = {
+  GITHUB_REPOSITORY: "acme-corp/my-repo",
+  GITHUB_REPOSITORY_OWNER: "acme-corp",
+  DEFAULT_BRANCH: "main",
+  GITHUB_TOKEN: "fake-actions-read-token",
+};
+const acmeUnprotected: Record<string, GithubAnswer> = {
+  "GET /repos/acme-corp/my-repo/branches/main": {
+    status: 200,
+    body: { name: "main", protected: false },
+  },
+};
 
 function plan(kind: Seed, env: Record<string, string>, answers = unprotected) {
   const { dir, sha } = seed(kind);
@@ -94,15 +109,16 @@ type Case = {
 
 const cases: Case[] = [
   {
-    name: "a template repository on its first push, with the token: init and settings",
+    name: "outside didi-build, a template repository's first push with a repository secret: init and settings",
     seed: "template",
     env: {
-      ...didiBuild,
+      ...acmeCorp,
       GITHUB_EVENT_NAME: "push",
       GITHUB_RUN_ATTEMPT: "1",
       HAS_BOOTSTRAP_TOKEN: "true",
       LAUNCHPAD_REPO_DESCRIPTION: description,
     },
+    answers: acmeUnprotected,
     status: 0,
     output: {
       init: "true",
@@ -111,10 +127,41 @@ const cases: Case[] = [
       slug: "my-repo",
       display_name: "My Repo",
       purpose: description,
-      owner: "Didi Build",
+      owner: "acme-corp",
       personal_data: "true",
     },
     requests: 1,
+  },
+  {
+    // The race at didi-build/form-trial's creation (2026-11-22): the form had granted the token
+    // before this push run read it, and the run set the project up without the form's inputs.
+    name: "in didi-build, a template repository's first push waits for the New project form, even with the token",
+    seed: "template",
+    env: {
+      ...didiBuild,
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "true",
+      LAUNCHPAD_REPO_DESCRIPTION: description,
+    },
+    status: 1,
+    output: { init: "true", settings: "true", execute: "false" },
+    says: PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE,
+    requests: 1,
+  },
+  {
+    name: "in didi-build, a template repository's first push without the token waits for the form too",
+    seed: "template",
+    env: {
+      ...didiBuild,
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "1",
+      HAS_BOOTSTRAP_TOKEN: "false",
+      LAUNCHPAD_REPO_DESCRIPTION: description,
+    },
+    status: 1,
+    output: { execute: "false" },
+    says: PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE,
   },
   {
     name: "personal data off when the variable says false",
@@ -145,11 +192,11 @@ const cases: Case[] = [
     requests: 0,
   },
   {
-    name: "didi-build without the token fails",
+    name: "Run workflow in didi-build without the token fails: outside a setup the repository has no access",
     seed: "template",
     env: {
       ...didiBuild,
-      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
       HAS_BOOTSTRAP_TOKEN: "false",
       LAUNCHPAD_REPO_DESCRIPTION: "",
     },
@@ -162,7 +209,7 @@ const cases: Case[] = [
     seed: "template",
     env: {
       ...didiBuild,
-      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
       HAS_BOOTSTRAP_TOKEN: "true",
       LAUNCHPAD_REPO_DESCRIPTION: "   ",
     },
@@ -264,7 +311,20 @@ const cases: Case[] = [
     output: { init: "false", settings: "true", execute: "true" },
   },
   {
-    name: "Re-run jobs on an initialized repository not yet protected: settings only",
+    name: "outside didi-build, Re-run jobs on an initialized repository not yet protected: settings only",
+    seed: "initialized",
+    env: {
+      ...acmeCorp,
+      GITHUB_EVENT_NAME: "push",
+      GITHUB_RUN_ATTEMPT: "2",
+      HAS_BOOTSTRAP_TOKEN: "true",
+    },
+    answers: acmeUnprotected,
+    status: 0,
+    output: { settings: "true", execute: "true" },
+  },
+  {
+    name: "in didi-build, Re-run jobs of a push waits for the New project form too",
     seed: "initialized",
     env: {
       ...didiBuild,
@@ -272,8 +332,9 @@ const cases: Case[] = [
       GITHUB_RUN_ATTEMPT: "2",
       HAS_BOOTSTRAP_TOKEN: "true",
     },
-    status: 0,
-    output: { settings: "true", execute: "true" },
+    status: 1,
+    output: { settings: "true", execute: "false" },
+    says: PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE,
   },
   {
     name: "Run workflow on a protected repository does nothing",
@@ -433,7 +494,7 @@ describe("bootstrap decide step (integration: fake GitHub, throwaway repository)
   it("asks GitHub one read-only question with the workflow's token, following no redirect", () => {
     const result = plan("template", {
       ...didiBuild,
-      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
       HAS_BOOTSTRAP_TOKEN: "true",
       LAUNCHPAD_REPO_DESCRIPTION: description,
     });
@@ -464,7 +525,7 @@ describe("bootstrap decide step (integration: fake GitHub, throwaway repository)
   it("passes a description with a line break through the delimiter form", () => {
     const result = plan("template", {
       ...didiBuild,
-      GITHUB_EVENT_NAME: "push",
+      GITHUB_EVENT_NAME: "workflow_dispatch",
       HAS_BOOTSTRAP_TOKEN: "true",
       LAUNCHPAD_REPO_DESCRIPTION: "first line\nsecond=line",
     });

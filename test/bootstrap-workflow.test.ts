@@ -52,9 +52,20 @@ describe("the Bootstrap workflow (unit: repo guard, Foreman's D-358 lock 1)", ()
   it("runs on a push to main and by hand (Foreman's form restarts it with workflow_dispatch)", () => {
     expect(Object.keys(wf.on).sort()).toEqual(["push", "workflow_dispatch"]);
     expect((wf.on.push as { branches: string[] }).branches).toEqual(["main"]);
-    expect(wf.concurrency).toEqual({ group: "bootstrap", "cancel-in-progress": false });
     expect(wf.permissions).toEqual({ contents: "read" });
     expect(wf.env).toBeUndefined();
+  });
+
+  it("queues every run that can set a repository up in one group; a didi-build push, which never does, takes its own", () => {
+    // A run started while another waits in the same group cancels the waiting one, so a push run
+    // in the shared group could cancel the New project form's run before it ran (form-trial,
+    // 2026-11-22). The decide step lets no push in didi-build set a repository up
+    // (pushWaitsForNewProjectForm), so those runs need no queue.
+    expect(wf.concurrency).toEqual({
+      group:
+        "${{ github.repository_owner == 'didi-build' && github.event_name == 'push' && format('bootstrap-push-{0}', github.run_id) || 'bootstrap' }}",
+      "cancel-in-progress": false,
+    });
   });
 
   it("takes two optional string inputs, empty by default, so a push and a blank Run workflow behave as before", () => {
@@ -146,9 +157,13 @@ describe("the Bootstrap workflow (unit: repo guard, Foreman's D-358 lock 1)", ()
       ref: "${{ needs.decide.outputs.sha }}",
       "persist-credentials": false,
     });
+    // Every time: init-project formats what it writes with the template's Prettier.
     const install = prepare.steps.find((s) => s.run?.includes("npm ci")) as Step;
     expect(install.run).toBe("npm ci --ignore-scripts");
-    expect(install.if).toBe("needs.decide.outputs.personal_data == 'true'");
+    expect(install.if).toBeUndefined();
+    expect(prepare.steps.indexOf(install)).toBeLessThan(
+      prepare.steps.findIndex((s) => s.run?.includes("init-project")),
+    );
     const init = prepare.steps.find((s) => s.run?.includes("init-project")) as Step;
     expect(init.run).toBe(
       'node scripts/init-project.mjs "$PROJECT_SLUG" "$PROJECT_NAME" "$PROJECT_PURPOSE" "$PROJECT_OWNER"',

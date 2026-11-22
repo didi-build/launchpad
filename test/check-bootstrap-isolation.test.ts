@@ -280,7 +280,7 @@ const cases: Violation[] = [
         "        env:\n          GH_TOKEN: ${{ secrets.BOOTSTRAP_TOKEN }}\n        run: npm ci --ignore-scripts\n",
       ),
     expect:
-      "job prepare step 3 (Install nodrift without lifecycle scripts): runs npm or npx",
+      "job prepare step 3 (Install the template's dependencies without lifecycle scripts): runs npm or npx",
   },
   {
     name: "the token is given at job level",
@@ -449,7 +449,12 @@ const cases: Violation[] = [
   {
     name: "bootstrap.yml uses YAML the check does not read",
     edit: (root) =>
-      change(root, BOOTSTRAP, "  group: bootstrap\n", "  group: &group bootstrap\n"),
+      change(
+        root,
+        BOOTSTRAP,
+        "  cancel-in-progress: false\n",
+        "  cancel-in-progress: &queue false\n",
+      ),
     expect: "the check reads only plain workflow YAML",
   },
   {

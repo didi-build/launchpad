@@ -24,6 +24,11 @@ import {
 } from "./lib/resolve-nodrift-cli.mjs";
 import { addD1BindingsToDataMap, DATA_MAP_PATH } from "./lib/data-map-bindings.mjs";
 import {
+  formatWithPrettier,
+  PRETTIER_MISSING_MESSAGE,
+  resolvePrettierCli,
+} from "./lib/prettier-cli.mjs";
+import {
   parseWranglerJsonc,
   replaceWranglerD1DatabaseName,
   replaceWranglerWorkerName,
@@ -130,6 +135,14 @@ if (statSync(wranglerPath, { throwIfNoEntry: false })?.isFile()) {
   }
 }
 
+// Init formats the files it writes with the project's own Prettier (below), so it needs the
+// project's dependencies installed. Checked here, after the other checks and before any write.
+const prettier = resolvePrettierCli(process.cwd());
+if (!prettier.ok) {
+  console.error(PRETTIER_MISSING_MESSAGE);
+  process.exit(1);
+}
+
 const purpose =
   purposeArg ??
   "Short description of what this project does — edit README and docs/architecture/overview.md.";
@@ -183,15 +196,20 @@ function escapeHtml(value) {
   );
 }
 
+/** The files init changes with the values above, for Prettier. */
+const written = new Set();
+
 for (const file of textFiles) {
   if (!statSync(file, { throwIfNoEntry: false })?.isFile()) continue;
   const html = file.endsWith(".html");
-  let text = readFileSync(file, "utf8");
+  const before = readFileSync(file, "utf8");
+  let text = before;
   for (const [from, to] of replacements) {
     const value = html ? escapeHtml(to) : to;
     text = text.replaceAll(from, () => value);
   }
   writeFileSync(file, text);
+  if (text !== before) written.add(file);
 }
 
 const pkgPath = "package.json";
@@ -201,9 +219,11 @@ pkg.description = purpose;
 pkg.license = "UNLICENSED";
 delete pkg.launchpadTemplate;
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+written.add(pkgPath);
 
 if (wranglerRenamed !== null) {
   writeFileSync(wranglerPath, wranglerRenamed);
+  written.add(wranglerPath);
 }
 
 const exampleFiles = ["src/greet.ts", "test/greet.test.ts"];
@@ -217,6 +237,27 @@ writeFileSync("src/.gitkeep", "");
 
 renameSync(README_TEMPLATE, "README.md");
 renameSync(LICENSE_TEMPLATE, "LICENSE");
+
+// A value can make a line longer than Prettier allows (the purpose in index.html's description,
+// in the first project the New project form made), and Prettier puts a short tag back on one
+// line, so no fixed layout in the templates suits every value. Prettier lays out each file init
+// changed instead, so the first commit passes `npm run check`. It runs before nodrift init, so
+// nodrift's files, and the hashes its manifest keeps of them, stay as nodrift wrote them.
+const moved = new Map([
+  [README_TEMPLATE, "README.md"],
+  [LICENSE_TEMPLATE, "LICENSE"],
+]);
+const formatted = formatWithPrettier(
+  prettier.cliPath,
+  [...written].map((file) => moved.get(file) ?? file),
+);
+if (formatted.output) {
+  process.stderr.write(formatted.output);
+}
+if (!formatted.ok) {
+  console.error("Prettier could not format the files init wrote.");
+  process.exit(1);
+}
 
 if (resolved.collects) {
   const nodrift = resolveNodriftCli(process.cwd());

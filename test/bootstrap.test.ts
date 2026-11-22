@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,16 +21,15 @@ import {
   isInitialized,
   MISSING_REPOSITORY_DESCRIPTION_MESSAGE,
   planNeedsToken,
+  pushWaitsForNewProjectForm,
   resolveBootstrapRepositoryDescription,
   resolveTokenPolicy,
   shouldExecuteBootstrap,
   validateCollectsPersonalDataEnv,
 } from "../.github/scripts/bootstrap-plan.mjs";
 
-const initScript = join(
-  fileURLToPath(new URL("..", import.meta.url)),
-  "scripts/init-project.mjs",
-);
+const workspaceRoot = fileURLToPath(new URL("..", import.meta.url));
+const initScript = join(workspaceRoot, "scripts/init-project.mjs");
 
 describe("bootstrap lib (unit)", () => {
   it("isInitialized is false only when README.project.md exists and launchpadTemplate is true", () => {
@@ -206,6 +206,21 @@ describe("bootstrap lib (unit)", () => {
     expect(validateCollectsPersonalDataEnv(undefined)).toEqual({ ok: true });
   });
 
+  it("pushWaitsForNewProjectForm: in didi-build only the form's dispatched run sets up, never a push", () => {
+    expect(
+      pushWaitsForNewProjectForm({ event: "push", repositoryOwner: "didi-build" }),
+    ).toBe(true);
+    expect(
+      pushWaitsForNewProjectForm({
+        event: "workflow_dispatch",
+        repositoryOwner: "didi-build",
+      }),
+    ).toBe(false);
+    expect(
+      pushWaitsForNewProjectForm({ event: "push", repositoryOwner: "acme-corp" }),
+    ).toBe(false);
+  });
+
   it("shouldExecuteBootstrap respects token policy", () => {
     const plan = { init: true, settings: true };
     expect(shouldExecuteBootstrap({ plan, tokenPolicy: "ok" })).toBe(true);
@@ -227,6 +242,12 @@ describe("init-project shell-safe purpose (unit)", () => {
       `${JSON.stringify({ name: "launchpad", launchpadTemplate: true, license: "MIT" }, null, 2)}\n`,
     );
     mkdirSync(join(root, "docs"), { recursive: true });
+    // Init formats what it writes with the project's Prettier, so it needs node_modules.
+    symlinkSync(
+      join(workspaceRoot, "node_modules"),
+      join(root, "node_modules"),
+      "junction",
+    );
   }
 
   it("handles quotes, backticks, command substitution, and newlines in purpose", () => {

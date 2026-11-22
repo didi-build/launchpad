@@ -6,8 +6,8 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Bootstrap (automatic)
 
-- [ ] Confirm the **Bootstrap** workflow on `main` succeeded ([runbook](./runbooks/bootstrap.md))
-- [ ] **didi-build** org repos: Foreman's New project form grants the org secret **`BOOTSTRAP_TOKEN`** for the setup and starts Bootstrap with the display name and the personal-data answer ([inputs](./runbooks/bootstrap.md#inputs)); to retry, run the form again
+- [ ] Confirm the **Bootstrap** workflow on `main` succeeded ([runbook](./runbooks/bootstrap.md)); in **didi-build**, the run the New project form started
+- [ ] **didi-build** org repos: Foreman's New project form grants the org secret **`BOOTSTRAP_TOKEN`** for the setup and starts Bootstrap with the display name and the personal-data answer ([inputs](./runbooks/bootstrap.md#inputs)); only that run sets the project up. The run on the first push fails with _Setup waits for Foreman's New project form_, as expected ([why](./runbooks/bootstrap.md#in-didi-build-setup-waits-for-the-new-project-form)); to retry, run the form again
 - [ ] **Other orgs / personal repos:** add a repo secret **`BOOTSTRAP_TOKEN`**, or complete the manual steps below
 
 ## Repository settings (GitHub)
@@ -25,7 +25,7 @@ GitHub template repos copy **files only**. Complete these steps after creating a
 
 ## Replace Launchpad placeholders
 
-- [ ] If Bootstrap did not run, run `npm install`, then `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"] [--personal-data | --no-personal-data]`. This moves `README.project.md` to `README.md` and `LICENSE.project` to `LICENSE` (optional **owner** defaults to `Didi Build`), writes the display name and purpose into the landing page (`index.html`), and names the Worker `<slug>` and its D1 database `<slug>-staging` in `wrangler.jsonc`. Interactive init defaults to **yes** for personal data (`Y/n`); non-interactive runs must pass a flag or set `LAUNCHPAD_COLLECTS_PERSONAL_DATA`. When personal data collection is enabled, `@didi-build/nodrift init` runs, init lists the Worker's `DB` binding in `docs/privacy/data-map.yml`, and `npm run nodrift` is included in `npm run check`.
+- [ ] If Bootstrap did not run, run `npm install`, then `npm run init-project -- <slug> "<display name>" ["<one-line purpose>"] ["<owner>"] [--personal-data | --no-personal-data]`. Init needs `npm install` first: it formats the files it writes with the project's Prettier, so they pass `npm run check`. It moves `README.project.md` to `README.md` and `LICENSE.project` to `LICENSE` (optional **owner** defaults to `Didi Build`), writes the display name and purpose into the landing page (`index.html`), and names the Worker `<slug>` and its D1 database `<slug>-staging` in `wrangler.jsonc`. Interactive init defaults to **yes** for personal data (`Y/n`); non-interactive runs must pass a flag or set `LAUNCHPAD_COLLECTS_PERSONAL_DATA`. When personal data collection is enabled, `@didi-build/nodrift init` runs, init lists the Worker's `DB` binding in `docs/privacy/data-map.yml`, and `npm run nodrift` is included in `npm run check`.
 - [ ] Confirm **`LICENSE`** and **`package.json` `license`** match your project (`UNLICENSED` + proprietary `LICENSE` is the default after init; adjust if you use another license)
 - [ ] Keep **`LICENSES/launchpad-MIT.txt`** (Launchpad MIT notice; required by `npm run check`)
 - [ ] Search for `Launchpad` / `launchpad` leftovers in README and docs

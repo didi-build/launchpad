@@ -38,11 +38,13 @@ jobs:
             cp -a "$repo_root" "$tmp/lp"
             cd "$tmp/lp"
             rm -rf node_modules .git
-            if [ "$expect_nodrift" = "yes" ]; then
-              npm ci
-            fi
-            npm run init-project -- smoke-test "Smoke Test" "CI template smoke" "$personal_data_flag"
-            node scripts/verify-smoke-init-copy.mjs --slug smoke-test --purpose "CI template smoke" --expect-nodrift "$expect_nodrift"
+            # init-project formats what it writes with the template's Prettier, so it needs npm ci.
+            npm ci
+            # The purpose of the first project Foreman's form made: too long for one line in
+            # index.html's description, so it checks that init's files pass npm run check.
+            local purpose="Throwaway project to test the New project form."
+            npm run init-project -- smoke-test "Smoke Test" "$purpose" "$personal_data_flag"
+            node scripts/verify-smoke-init-copy.mjs --slug smoke-test --purpose "$purpose" --expect-nodrift "$expect_nodrift"
             npm ci
             npm run check
           }
