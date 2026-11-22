@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,8 @@ describe("repo-settings on derived project (unit)", () => {
       join(dir, "package.json"),
       `${JSON.stringify({ name: "launchpad", launchpadTemplate: true }, null, 2)}\n`,
     );
+    // Init formats what it writes with the project's Prettier, so it needs node_modules.
+    symlinkSync(join(root, "node_modules"), join(dir, "node_modules"), "junction");
     execFileSync("node", [initScript, "demo", "Demo App", "--no-personal-data"], {
       cwd: dir,
       encoding: "utf8",

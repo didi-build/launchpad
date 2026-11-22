@@ -6,8 +6,8 @@ Launchpad-derived repositories run the **Bootstrap** workflow automatically. It 
 
 Bootstrap acts only while the repository is new, and only protected code under `.github/` ever receives the token (Foreman's D-358 lock 1, built as its O-113; [ADR 0001's amendment](../decisions/0001-template-bootstrap.md)). It has three jobs, in order:
 
-1. **decide** runs `node .github/scripts/bootstrap-plan.mjs` on a read-only checkout of the default branch. It reads the template files (`README.project.md`, and `"launchpadTemplate": true` in `package.json`), and asks GitHub, with the workflow's own read-only token, whether the default branch is protected. Bootstrap's settings step sets that protection last, so a protected default branch means the repository is already set up, and then nothing else runs. The step also checks `LAUNCHPAD_COLLECTS_PERSONAL_DATA`, the two [inputs](#inputs) and, when init will run, the repository description, and works out the init arguments: the slug from the repository name, the display name from the `display_name` input or else the repository name, the purpose from the GitHub repository description, and the **owner** from `GITHUB_REPOSITORY_OWNER` (`didi-build` becomes `Didi Build`; other owners use the login as it is).
-2. **prepare** runs the template's own setup without the token and with `contents: read`: `npm ci --ignore-scripts` when personal data is on, then `scripts/init-project.mjs`, which also runs `@didi-build/nodrift init` when personal data is on and lists the Worker's `DB` binding in the data map. The `collects_personal_data` input, or else the repository variable **`LAUNCHPAD_COLLECTS_PERSONAL_DATA`** (default `true`), controls that (see [ADR 0003](../decisions/0003-nodrift-in-launchpad.md)). Init also removes Launchpad's example code, names the Worker `<slug>` and its D1 database `<slug>-staging`, and sets `package.json` `description` from the purpose. The job hands its changes over as a patch (`git diff --binary`), an artifact kept one day.
+1. **decide** runs `node .github/scripts/bootstrap-plan.mjs` on a read-only checkout of the default branch. It reads the template files (`README.project.md`, and `"launchpadTemplate": true` in `package.json`), and asks GitHub, with the workflow's own read-only token, whether the default branch is protected. Bootstrap's settings step sets that protection last, so a protected default branch means the repository is already set up, and then nothing else runs. The step also checks `LAUNCHPAD_COLLECTS_PERSONAL_DATA`, the two [inputs](#inputs) and, when init will run, the repository description, and works out the init arguments: the slug from the repository name, the display name from the `display_name` input or else the repository name, the purpose from the GitHub repository description, and the **owner** from `GITHUB_REPOSITORY_OWNER` (`didi-build` becomes `Didi Build`; other owners use the login as it is). In **didi-build**, a push that would set the repository up stops here: see [In didi-build, setup waits for the New project form](#in-didi-build-setup-waits-for-the-new-project-form).
+2. **prepare** runs the template's own setup without the token and with `contents: read`: `npm ci --ignore-scripts`, then `scripts/init-project.mjs`. Init formats the files it writes with the template's own Prettier, so the setup commit passes CI's format check whatever the display name and purpose. It also runs `@didi-build/nodrift init` when personal data is on and lists the Worker's `DB` binding in the data map. The `collects_personal_data` input, or else the repository variable **`LAUNCHPAD_COLLECTS_PERSONAL_DATA`** (default `true`), controls that (see [ADR 0003](../decisions/0003-nodrift-in-launchpad.md)). Init also removes Launchpad's example code, names the Worker `<slug>` and its D1 database `<slug>-staging`, and sets `package.json` `description` from the purpose. The job hands its changes over as a patch (`git diff --binary`), an artifact kept one day.
 3. **apply** runs on a fresh runner and runs nothing but `.github/scripts/`. It checks out the same commit, applies the patch as data and commits it as `github-actions[bot]`, pushes the commit to the default branch with the token, then applies and verifies the repository settings with the token: the Dependabot auto-merge label, auto-merge, delete head branches, squash-only merges, and branch protection last.
 
 When Bootstrap will actually run init, the GitHub repository description must be set; if it is empty, the decide step fails with a clear message (skipped runs and already-initialized repos are not affected).
@@ -52,6 +52,16 @@ A push to `main` of an initialized repository ends in the decide step without a 
 
 The template repository `didi-build/launchpad` skips Bootstrap entirely.
 
+### In didi-build, setup waits for the New project form
+
+In **didi-build**, only the run Foreman's New project form starts (`workflow_dispatch`, with the two [inputs](#inputs)) sets a repository up. A push never does, with or without the token: when the plan above would set the repository up, the decide step fails with _Setup waits for Foreman's New project form_, and nothing else runs. A push to a set-up repository (protected default branch), and a first-attempt push to an initialized one, still do nothing without failing, as before.
+
+Why: GitHub starts a push run on the template's initial commit at about the same time as the form starts its own run. At the first project the form made (`didi-build/form-trial`, 2026-11-22), the push run read the token the form had just granted and set the project up without the inputs: the display name came from the repository name, and the personal-data answer from the default.
+
+So for a project the form makes, the run on the initial commit fails, as it did before when it had no token, and the form's run does the setup. To retry a setup, run the form again. **Re-run jobs** on a push run there fails the same way.
+
+Concurrency: runs that can set a repository up share one group, `bootstrap`, so two never run at once. GitHub keeps one running and one waiting run per group, and a new run cancels the one waiting. At form-trial, the form's run waited behind the push run, and the push of the setup commit cancelled it. A push run in didi-build now takes a group of its own (`bootstrap-push-<run id>`), since it never sets anything up, so it can neither hold up nor cancel the form's run. Outside didi-build every run keeps the shared group, as before.
+
 ## `BOOTSTRAP_TOKEN` (organization secret)
 
 For **didi-build** derived **public** repositories:
@@ -62,7 +72,7 @@ For **didi-build** derived **public** repositories:
 2. In the **didi-build** org, add an Actions secret named `BOOTSTRAP_TOKEN` with the PAT value.
 3. Share the secret with **all repositories** (or the repos that are created from Launchpad).
 
-**In didi-build, access only during setup (Foreman's D-358 lock 2, O-114).** Step 3 does not apply there: the secret's repository access is **Selected repositories**, normally none. Foreman's New project form adds the new repository to the secret's selected repositories, then starts Bootstrap again with `workflow_dispatch` on `main` and the two inputs, since the first run, at creation, has no token and fails. Foreman removes the repository again once that run ends. To retry a failed setup there, run Foreman's form again rather than **Run workflow** or **Re-run jobs**: outside a setup the repository has no access, so such a run has no token.
+**In didi-build, access only during setup (Foreman's D-358 lock 2, O-114).** Step 3 does not apply there: the secret's repository access is **Selected repositories**, normally none. Foreman's New project form adds the new repository to the secret's selected repositories, then starts Bootstrap again with `workflow_dispatch` on `main` and the two inputs. That run does the setup: the run GitHub starts at creation, on the push of the initial commit, fails without setting anything up, token or not ([why](#in-didi-build-setup-waits-for-the-new-project-form)). Foreman removes the repository again once that run ends. To retry a failed setup there, run Foreman's form again rather than **Run workflow** or **Re-run jobs**: outside a setup the repository has no access, so such a run has no token.
 
 Derived repos created outside **didi-build** do not receive this org secret. They either:
 
@@ -80,6 +90,7 @@ Derived repos created outside **didi-build** do not receive this org secret. The
 - **Re-run all jobs** on a failed Bootstrap workflow run (re-applies **settings** only if init already completed). Re-run reuses the original event payload and inputs, so it does **not** pick up a repository description you added after the failure. **Re-run failed jobs** reuses the first decision: it works when the push did not happen, and fails at the push once the setup commit has landed, so use **Re-run all jobs** or **Run workflow** then.
 - **Run workflow** manually from the Actions tab to retry with the **current** repository description and settings (use this after fixing a missing description). Fill in the [inputs](#inputs) again if the first run had them.
 - Both do nothing once the settings step has protected the default branch.
+- In **didi-build**, run Foreman's form again instead (see [above](#bootstrap_token-organization-secret)): **Re-run jobs** on a push run fails there with _Setup waits for Foreman's New project form_.
 
 ### Missing repository description
 
@@ -119,8 +130,10 @@ npm run repo-settings -- --verify
 
 ## To verify at the first real run
 
-Built and tested with fakes (a fake GitHub API, git stubs, local repositories), without a real GitHub or token, as Foreman's copy was (its O-113). At the first project Foreman's form sets up from this template, check:
+Built and tested with fakes (a fake GitHub API, git stubs, local repositories), without a real GitHub or token, as Foreman's copy was (its O-113). The first real run (`didi-build/form-trial`, 2026-11-22) found two bugs, both fixed since: the push run on the initial commit set the project up instead of the form's run ([In didi-build, setup waits for the New project form](#in-didi-build-setup-waits-for-the-new-project-form)), and init wrote an `index.html` that failed CI's format check, so no staging build was kept. At the next project Foreman's form sets up from this template, check:
 
+- The push run on the initial commit fails in the decide step with _Setup waits for Foreman's New project form_, and the form's `workflow_dispatch` run starts at once and is not cancelled.
+- CI passes on the setup commit, `npm run check` included, so CI keeps the `staging-site` build and Foreman deploys staging.
 - The decide step's summary says the display name and the personal-data answer came from the inputs, and the setup commit's `README.md`, `index.html` and `package.json` show the form's display name and purpose.
 - The token job sees no repository code: in the `apply` job's log, only `actions/checkout`, `actions/download-artifact` and the three `node .github/scripts/...` steps run, and only the push and settings steps show `GH_TOKEN` (masked) in their env.
 - GitHub answers `protected: false` for the new repository's default branch before Bootstrap and `protected: true` after it.

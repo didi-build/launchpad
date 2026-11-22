@@ -5,6 +5,7 @@ name: Bootstrap
 # - decide: a protected script decides whether the repository still needs setting up. When it
 #   says no, nothing else runs. Foreman's New project form starts it with two inputs, the display
 #   name and the personal-data answer (Foreman's ADR 0118); they reach the script through env only.
+#   In didi-build only that run sets a repository up, never a push.
 # - prepare: the template's own setup (npm ci, init-project, nodrift init) runs without the token
 #   and hands its changes over as a patch.
 # - apply: a fresh runner applies the patch as data, pushes it with the token and applies the
@@ -27,8 +28,15 @@ on:
         default: ""
         type: string
 
+# One group, so two runs never set a repository up at once. GitHub lets a group hold one running
+# run and one pending run: a run started while another waits cancels the waiting one, whatever
+# cancel-in-progress says. At didi-build/form-trial's creation (2026-11-22) the push of the setup
+# commit cancelled the New project form's run that way, while it waited for the first push run.
+# In didi-build a push never sets the repository up (the decide step leaves that to the form's
+# run), so each push run there takes a group of its own and can never cancel the form's run.
+# Outside didi-build a push can set the repository up, so it keeps the shared group, as before.
 concurrency:
-  group: bootstrap
+  group: ${{ github.repository_owner == 'didi-build' && github.event_name == 'push' && format('bootstrap-push-{0}', github.run_id) || 'bootstrap' }}
   cancel-in-progress: false
 
 permissions:
@@ -89,8 +97,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      - name: Install nodrift without lifecycle scripts
-        if: needs.decide.outputs.personal_data == 'true'
+      # Always: init-project formats the files it writes with the template's own Prettier, so the
+      # setup commit passes CI's format check. nodrift comes with it when personal data is on.
+      - name: Install the template's dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
 
       - name: Replace the template placeholders (init-project, and nodrift init when personal data is on)

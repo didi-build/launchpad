@@ -16,6 +16,15 @@
 // LAUNCHPAD_COLLECTS_PERSONAL_DATA. Foreman's New project form sends both. An empty input, as on
 // every push, keeps the earlier behaviour: the name from the repository's name, and the
 // variable, which defaults to yes (Foreman's D-359 and D-435).
+//
+// In `didi-build`, a push never sets a repository up, token or not: only a `workflow_dispatch`
+// run does, the one Foreman's New project form starts with the two inputs once it has given the
+// repository access to BOOTSTRAP_TOKEN. GitHub starts a push run on the template's initial
+// commit at about the same time, and in the first project the form made (didi-build/form-trial,
+// 2026-11-22) that run read the token the form had just granted and set the project up without
+// the inputs. So a push there that would set the repository up stops in this step and says that
+// setup waits for the form. It fails, as such a run without the token always has. Outside
+// `didi-build` nothing changes: a push sets the repository up with a repository secret.
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -48,6 +57,9 @@ export const INVALID_COLLECTS_PERSONAL_DATA_INPUT_MESSAGE =
 
 export const ALREADY_SET_UP_MESSAGE =
   "The default branch is already protected, so this repository is already set up. Bootstrap does nothing.";
+
+export const PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE =
+  "Setup waits for Foreman's New project form: in didi-build only the run the form starts, with the project's display name and personal-data answer, sets a repository up, never a push. If the form started Bootstrap, that run does the setup. To retry a setup, run the New project form again. Nothing was changed.";
 
 export const TEMPLATE_FILES_ON_PROTECTED_BRANCH_WARNING =
   "The template files (README.project.md and launchpadTemplate in package.json) are present, but the default branch is already protected. Bootstrap does nothing; set the repository up by hand if it still needs it (docs/new-project-checklist.md).";
@@ -306,6 +318,18 @@ export function resolveTokenPolicy({
 }
 
 /**
+ * Whether a run that would set the repository up must leave it to Foreman's New project form
+ * instead: a push in `didi-build`, whatever its attempt and whether or not it has the token.
+ * bootstrap.yml's concurrency group relies on this: it lets such push runs run beside the form's.
+ *
+ * @param {{ event: string; repositoryOwner: string }} input
+ * @returns {boolean}
+ */
+export function pushWaitsForNewProjectForm({ event, repositoryOwner }) {
+  return event === "push" && repositoryOwner === "didi-build";
+}
+
+/**
  * @param {{ plan: { init: boolean; settings: boolean }; tokenPolicy: string }} input
  * @returns {boolean}
  */
@@ -540,6 +564,16 @@ export async function runPlan(env, cwd, fetchImpl) {
     }
     appendStepSummary(env, summaryLines(ctx, notes));
     return 0;
+  }
+
+  // After the protection read, so a set-up repository still says so; before the token policy,
+  // so a push in didi-build waits for the form whether or not the token is there.
+  if (pushWaitsForNewProjectForm({ event, repositoryOwner: owner })) {
+    writeDecision(plan, tokenPolicy, false);
+    return fail(
+      "Setup waits for the New project form",
+      PUSH_WAITS_FOR_NEW_PROJECT_FORM_MESSAGE,
+    );
   }
 
   const execute = shouldExecuteBootstrap({ plan, tokenPolicy });
