@@ -160,7 +160,9 @@ jobs:
   # 127.0.0.1 and checks that the app loads and serves that commit, then bundles the Worker with
   # Wrangler's dry run, lays out the staging build and runs it locally with a local D1 database
   # to probe / and /api/health. Foreman records this job's result as `preview_check`; the job name
-  # is fixed. No secret, no credential, no hosted service.
+  # is fixed. On a pull request only, the probed static site, marker included, is kept for 3 days
+  # as the artifact `qa-site`: Foreman's QA reads it and browses it in a sealed pod (Foreman's
+  # ADR 0119 slice 5). No secret, no credential, no hosted service.
   preview-check:
     name: preview-check
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -217,3 +219,11 @@ jobs:
           path: dist/staging-site/
           if-no-files-found: error
           retention-days: 7
+      - name: Keep the probed build for QA's browser
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qa-site
+          path: dist/site/
+          if-no-files-found: error
+          retention-days: 3

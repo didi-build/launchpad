@@ -179,25 +179,32 @@ describe("the preview check's workflow (unit: repo guard, ADR 0006)", () => {
   it("uses checkout and setup-node as the check job pins them, and the upload pin", () => {
     const pins = workflow.jobs.check!.steps.flatMap((s) => (s.uses ? [s.uses] : []));
     const used = job.steps.flatMap((s) => (s.uses ? [s.uses] : []));
-    expect(used).toHaveLength(3);
+    expect(used).toHaveLength(4);
     for (const uses of used.slice(0, 2)) expect(pins, uses).toContain(uses);
-    expect(used[2]).toBe(UPLOAD_PIN);
+    expect(used.slice(2)).toEqual([UPLOAD_PIN, UPLOAD_PIN]);
   });
 });
 
 describe("the staging site artifact (unit: repo guard, ADR 0006)", () => {
-  const index = job.steps.findIndex((s) =>
-    s.uses?.startsWith("actions/upload-artifact@"),
+  const index = job.steps.findIndex(
+    (s) =>
+      s.uses?.startsWith("actions/upload-artifact@") &&
+      s.with?.name === STAGING_SITE_ARTIFACT,
   );
   const upload = job.steps[index]!;
 
-  it("keeps the probed staging build as staging-site, as the last step, after both probes", () => {
+  it("keeps the probed staging build as staging-site, after both probes, with only the uploads after it", () => {
     expect(text).toContain(`uses: ${UPLOAD_PIN} # v4.6.2`);
     expect(upload.with?.name).toBe(STAGING_SITE_ARTIFACT);
     expect(upload.with?.path).toBe(`${STAGING}/`);
     expect(upload.with?.["if-no-files-found"]).toBe("error");
-    // The last step: what is kept is exactly the build the Worker probe ran, marker included.
-    expect(index).toBe(job.steps.length - 1);
+    // What is kept is exactly the build the Worker probe ran, marker included: only the two
+    // uploads follow the probes.
+    expect(
+      job.steps
+        .slice(index)
+        .every((s) => s.uses?.startsWith("actions/upload-artifact@")),
+    ).toBe(true);
     for (const pattern of [/preview-check\.mjs probe /, /preview-check\.mjs worker /]) {
       const probe = job.steps.findIndex((s) => pattern.test(s.run ?? ""));
       expect(probe).toBeGreaterThan(0);
@@ -214,6 +221,46 @@ describe("the staging site artifact (unit: repo guard, ADR 0006)", () => {
 
   it("keeps it for a short time, with no secret, token or environment", () => {
     expect(upload.with?.["retention-days"]).toBe(7);
+    expect(Object.keys(upload.with ?? {}).sort()).toEqual([
+      "if-no-files-found",
+      "name",
+      "path",
+      "retention-days",
+    ]);
+    expect(JSON.stringify(upload)).not.toMatch(
+      /secrets\.|github\.token|GITHUB_TOKEN|GH_TOKEN/,
+    );
+    expect(upload.env).toBeUndefined();
+  });
+});
+
+describe("the site QA browses (unit: repo guard, Foreman's ADR 0119 slice 5)", () => {
+  const index = job.steps.findIndex(
+    (s) => s.uses?.startsWith("actions/upload-artifact@") && s.with?.name === "qa-site",
+  );
+  const upload = job.steps[index]!;
+
+  it("keeps the probed static site, marker included, as qa-site, after the site probe", () => {
+    expect(index).toBeGreaterThan(0);
+    expect(upload.uses).toBe(UPLOAD_PIN);
+    expect(upload.with?.path).toBe(`${SITE}/`);
+    expect(upload.with?.["if-no-files-found"]).toBe("error");
+    const probe = job.steps.findIndex((s) =>
+      /preview-check\.mjs probe /.test(s.run ?? ""),
+    );
+    expect(probe).toBeGreaterThan(0);
+    expect(probe).toBeLessThan(index);
+    expect(
+      job.steps
+        .slice(index)
+        .every((s) => s.uses?.startsWith("actions/upload-artifact@")),
+    ).toBe(true);
+  });
+
+  it("runs on a pull request only, keeps it 3 days, with no secret, token or environment", () => {
+    expect(upload.if).toBe("github.event_name == 'pull_request'");
+    expect(upload["continue-on-error"]).toBeUndefined();
+    expect(upload.with?.["retention-days"]).toBe(3);
     expect(Object.keys(upload.with ?? {}).sort()).toEqual([
       "if-no-files-found",
       "name",
